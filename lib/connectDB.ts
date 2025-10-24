@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 
-const DB_URI = process.env.DB_URL as string;
+const MONGODB_URI = process.env.MONGODB_URI as string;
+
+if (!MONGODB_URI) {
+  throw new Error('Please define the MONGODB_URI environment variable');
+}
 
 export const connectDB = async () => {
   try {
@@ -8,13 +12,11 @@ export const connectDB = async () => {
       console.log("Already connected!");
       return;
     }
-    await mongoose.connect(DB_URI, {
-      dbName: "nextAuth",
-    });
+    
+    await mongoose.connect(MONGODB_URI);
     console.log("Database connected!");
   } catch (err) {
-    console.log(err);
+    console.error("Database connection error:", err);
     console.log("Database not connected!");
-    process.exit(1);
   }
 };

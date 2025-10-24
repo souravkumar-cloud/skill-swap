@@ -3,11 +3,9 @@
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { redirect } from "next/navigation";
-// import {auth} from 'next-auth/next'
 
-
-export default async function LoginPage() {
+// ✅ Remove 'async' - Client Components cannot be async
+export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -21,11 +19,6 @@ export default async function LoginPage() {
       callbackUrl: '/', // redirect after login
     });
   };
-  //   const session = await auth();
-  // if (session) {
-  //   return redirect("/");
-  // }
-
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col md:flex-row items-center justify-center px-4 py-12 gap-8">
@@ -75,7 +68,7 @@ export default async function LoginPage() {
           className="flex items-center justify-center gap-2 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-white py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition"
         >
           {/* Google SVG */}
-           <svg
+          <svg
             width="20"
             height="20"
             viewBox="-3 0 262 262"

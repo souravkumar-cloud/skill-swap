@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import SiderBar from "@/components/Sidebar";
 import { auth } from "@/auth";
 
 export default async function Home() {
@@ -15,6 +16,7 @@ export default async function Home() {
 
   return (
     <div>
+      <SiderBar/>
       <Header user={user || undefined} />
       <main className="p-6">
         <h1 className="text-2xl font-bold">Welcome {user?.name || "Guest"} 👋</h1>
