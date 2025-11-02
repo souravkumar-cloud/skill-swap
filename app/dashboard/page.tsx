@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import DashboardLayout from '@/components/DashboardLayout';
+import { useSession } from "next-auth/react";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faUsers,
@@ -11,11 +11,8 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 
 export default function DashboardPage() {
-  const user = {
-    name: 'John Doe',
-    email: 'john@example.com',
-    avatarUrl: '/avatars/john.jpg',
-  };
+  const { data: session } = useSession();
+  const user = session?.user;
 
   const stats = [
     {
@@ -73,13 +70,13 @@ export default function DashboardPage() {
   ];
 
   return (
-    <DashboardLayout user={user}>
+    <div>
       {/* Welcome Section */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">
-          Welcome back, {user.name}! 👋
+        <h1 className="text-3xl font-bold text-white mb-2">
+          Welcome back, {user?.name || 'User'}! 👋
         </h1>
-        <p className="text-gray-600">
+        <p className="text-gray-400">
           Here's what's happening with your skill exchanges today.
         </p>
       </div>
@@ -89,7 +86,7 @@ export default function DashboardPage() {
         {stats.map((stat, index) => (
           <div
             key={index}
-            className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow p-6 border border-gray-100"
+            className="bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-shadow p-6 border border-gray-700"
           >
             <div className="flex items-start justify-between mb-4">
               <div
@@ -97,13 +94,13 @@ export default function DashboardPage() {
               >
                 <FontAwesomeIcon icon={stat.icon} className="text-white text-xl" />
               </div>
-              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
+              <span className="text-xs text-green-400 bg-green-900/30 px-2 py-1 rounded-full flex items-center gap-1">
                 <FontAwesomeIcon icon={faArrowTrendUp} className="text-xs" />
                 {stat.trend}
               </span>
             </div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-1">{stat.value}</h3>
-            <p className="text-sm text-gray-600">{stat.title}</p>
+            <h3 className="text-2xl font-bold text-white mb-1">{stat.value}</h3>
+            <p className="text-sm text-gray-400">{stat.title}</p>
           </div>
         ))}
       </div>
@@ -111,26 +108,26 @@ export default function DashboardPage() {
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Matches */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">
+        <div className="lg:col-span-2 bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+          <h2 className="text-xl font-bold text-white mb-4">
             Recent Skill Matches
           </h2>
           <div className="space-y-4">
             {recentMatches.map((match, index) => (
               <div
                 key={index}
-                className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex items-center gap-4 p-4 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors"
               >
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-2xl">
                   {match.avatar}
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-800">{match.name}</h3>
-                  <p className="text-sm text-gray-600">
-                    Wants to learn <span className="font-medium text-blue-600">{match.skill}</span>
+                  <h3 className="font-semibold text-white">{match.name}</h3>
+                  <p className="text-sm text-gray-400">
+                    Wants to learn <span className="font-medium text-blue-400">{match.skill}</span>
                   </p>
-                  <p className="text-sm text-gray-600">
-                    Can teach <span className="font-medium text-green-600">{match.exchange}</span>
+                  <p className="text-sm text-gray-400">
+                    Can teach <span className="font-medium text-green-400">{match.exchange}</span>
                   </p>
                 </div>
                 <div className="text-right">
@@ -145,8 +142,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Quick Actions</h2>
+        <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+          <h2 className="text-xl font-bold text-white mb-4">Quick Actions</h2>
           <div className="space-y-3">
             <button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all font-medium">
               + Add New Skill
@@ -154,30 +151,30 @@ export default function DashboardPage() {
             <button className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-medium">
               Browse Skills
             </button>
-            <button className="w-full border-2 border-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+            <button className="w-full border-2 border-gray-600 text-gray-300 py-3 rounded-lg hover:bg-gray-700 transition-colors font-medium">
               View Messages
             </button>
           </div>
 
           {/* Progress Section */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="font-semibold text-gray-800 mb-3">Learning Progress</h3>
+          <div className="mt-6 pt-6 border-t border-gray-700">
+            <h3 className="font-semibold text-white mb-3">Learning Progress</h3>
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">React Mastery</span>
-                  <span className="font-medium text-blue-600">75%</span>
+                  <span className="text-gray-400">React Mastery</span>
+                  <span className="font-medium text-blue-400">75%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-700 rounded-full h-2">
                   <div className="bg-blue-600 h-2 rounded-full" style={{ width: '75%' }}></div>
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">UI Design</span>
-                  <span className="font-medium text-purple-600">50%</span>
+                  <span className="text-gray-400">UI Design</span>
+                  <span className="font-medium text-purple-400">50%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-700 rounded-full h-2">
                   <div className="bg-purple-600 h-2 rounded-full" style={{ width: '50%' }}></div>
                 </div>
               </div>
@@ -185,6 +182,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </div>
   );
 }

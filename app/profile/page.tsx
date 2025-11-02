@@ -1,25 +1,15 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { redirect } from "next/navigation";
 import { useState } from "react";
-import SignOut from "../(auth)/SignOut/SignOut";
 
-export default function Home() {
-  const { data: session, status } = useSession();
+export default function ProfilePage() {
+  const { data: session } = useSession();
   const [isEditing, setIsEditing] = useState(false);
   const [bio, setBio] = useState("No bio yet. Add something about yourself!");
   const [skills, setSkills] = useState("No teaching skills added yet");
 
-  if (status === "unauthenticated") {
-    return redirect("/login");
-  }
-  if (!session) {
-    return <p>Loading...</p>;
-  }
-
-  const { user } = session;
-  const formattedDate = new Date(session.expires).toLocaleString();
+  const user = session?.user;
 
   const handleToggleEdit = () => {
     setIsEditing((prev) => !prev);
@@ -31,14 +21,14 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Profile Header */}
-      <div className="bg-gray-800 rounded-xl p-6 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center">
+      <div className="bg-gray-800 rounded-xl p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:justify-between shadow-lg">
+        <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
+          <div className="relative shrink-0">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-700 rounded-full flex items-center justify-center">
               <svg
-                className="w-10 h-10 text-gray-400"
+                className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400"
                 fill="currentColor"
                 viewBox="0 0 24 24"
               >
@@ -47,7 +37,7 @@ export default function Home() {
             </div>
             <div className="absolute bottom-0 right-0 bg-blue-600 p-1 rounded-full">
               <svg
-                className="w-4 h-4 text-white"
+                className="w-3 h-3 sm:w-4 sm:h-4 text-white"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -55,9 +45,13 @@ export default function Home() {
               </svg>
             </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">{user?.name || "SOURAV KUMAR"}</h1>
-            <p className="text-blue-400">{user?.email || "sokukumar678@gmail.com"}</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-white truncate">
+              {user?.name || "SOURAV KUMAR"}
+            </h1>
+            <p className="text-sm sm:text-base text-blue-400 truncate">
+              {user?.email || "sokukumar678@gmail.com"}
+            </p>
           </div>
         </div>
 
@@ -68,15 +62,11 @@ export default function Home() {
             isEditing
               ? "bg-green-600 hover:bg-green-500"
               : "bg-gray-700 hover:bg-gray-600"
-          } px-4 py-2 rounded text-sm flex items-center gap-2 transition`}
+          } px-3 sm:px-4 py-2 rounded text-xs sm:text-sm flex items-center gap-2 transition text-white w-full sm:w-auto justify-center whitespace-nowrap`}
         >
-          <svg
-            className="w-4 h-4"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24">
             {isEditing ? (
-              <path d="M5 13l4 4L19 7" /> // check icon
+              <path d="M5 13l4 4L19 7" />
             ) : (
               <path d="M3 17.25V21h3.75l11.06-11.06-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" />
             )}
@@ -86,39 +76,39 @@ export default function Home() {
       </div>
 
       {/* Info Sections */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {/* About Me */}
-        <div className="bg-gray-800 p-6 rounded-xl shadow">
-          <h2 className="text-xl font-semibold mb-2 border-b border-gray-600 pb-2">
+        <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow">
+          <h2 className="text-lg sm:text-xl font-semibold mb-2 border-b border-gray-600 pb-2 text-white">
             About Me
           </h2>
           {isEditing ? (
             <textarea
               value={bio}
               onChange={(e) => setBio(e.target.value)}
-              className="w-full bg-gray-700 text-gray-200 p-3 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-gray-700 text-gray-200 p-3 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
               rows={4}
             />
           ) : (
-            <p className="text-gray-400 whitespace-pre-line">{bio}</p>
+            <p className="text-gray-400 whitespace-pre-line text-sm sm:text-base">{bio}</p>
           )}
         </div>
 
         {/* Skills */}
-        <div className="bg-gray-800 p-6 rounded-xl shadow">
-          <h2 className="text-xl font-semibold mb-2 border-b border-gray-600 pb-2">
+        <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow">
+          <h2 className="text-lg sm:text-xl font-semibold mb-2 border-b border-gray-600 pb-2 text-white">
             My Skills
           </h2>
-          <h3 className="text-purple-400 font-semibold">I Can Teach</h3>
+          <h3 className="text-purple-400 font-semibold text-sm sm:text-base mb-2">I Can Teach</h3>
           {isEditing ? (
             <textarea
               value={skills}
               onChange={(e) => setSkills(e.target.value)}
-              className="w-full bg-gray-700 text-gray-200 p-3 rounded resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-gray-700 text-gray-200 p-3 rounded resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm sm:text-base"
               rows={3}
             />
           ) : (
-            <p className="text-gray-400 whitespace-pre-line">{skills}</p>
+            <p className="text-gray-400 whitespace-pre-line text-sm sm:text-base">{skills}</p>
           )}
         </div>
       </div>

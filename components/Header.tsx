@@ -2,16 +2,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faBars,
-  faEnvelope,
   faBell,
   faUser,
-  faLightbulb,
   faGear,
   faCircleQuestion,
   faRightFromBracket,
+  faHome,
+  faArrowRightArrowLeft,
+  faGraduationCap,
+  faUsers,
+  faBookOpen,
+  faTimes,
 } from '@fortawesome/free-solid-svg-icons';
 
 interface UserType {
@@ -24,12 +29,30 @@ interface NavbarProps {
   user?: UserType;
 }
 
+interface MenuItem {
+  name: string;
+  href: string;
+  icon: any;
+}
+
 const Header: React.FC<NavbarProps> = ({ user }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isBellOpen, setIsBellOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+
+  const menuItems: MenuItem[] = [
+    { name: 'Dashboard', href: '/dashboard', icon: faHome },
+    { name: 'Skill Exchange', href: '/skill-exchange', icon: faArrowRightArrowLeft },
+    { name: 'Learning Hub', href: '/learning-hub', icon: faGraduationCap },
+    { name: 'Community', href: '/community', icon: faUsers },
+    { name: 'Resources', href: '/resources', icon: faBookOpen },
+    { name: 'Profile', href: '/profile', icon: faUser },
+  ];
+
+  const isActive = (href: string) => pathname === href;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -46,15 +69,33 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
 
   return (
     <nav className="sticky top-0 z-50 bg-white shadow-md">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-[70px]">
           {/* Left: Logo */}
-          <Link href="/dashboard" className="text-blue-500 text-2xl font-semibold">
+          <Link href="/dashboard" className="text-blue-500 text-2xl font-semibold flex-shrink-0">
             Skill Swap
           </Link>
 
+          {/* Center: Navigation Menu (Desktop) */}
+          <div className="hidden lg:flex items-center space-x-1 flex-1 justify-center px-8">
+            {menuItems.map((item) => (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                  isActive(item.href)
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <FontAwesomeIcon icon={item.icon} className="text-sm" />
+                <span className="font-medium text-sm">{item.name}</span>
+              </Link>
+            ))}
+          </div>
+
           {/* Right: Profile & Notifications */}
-          <div className="hidden md:flex items-center space-x-5">
+          <div className="hidden md:flex items-center space-x-5 flex-shrink-0">
             {/* Bell/Notification Icon */}
             <div className="relative" ref={bellRef}>
               <button
@@ -168,16 +209,17 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
           <div className="md:hidden">
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="text-gray-600 hover:text-blue-500 focus:outline-none"
+              className="text-gray-600 hover:text-blue-500 focus:outline-none p-2"
             >
-              <FontAwesomeIcon icon={faBars} className="text-2xl" />
+              <FontAwesomeIcon icon={isMobileMenuOpen ? faTimes : faBars} className="text-2xl" />
             </button>
           </div>
         </div>
 
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden pb-4">
+          <div className="md:hidden pb-4 border-t border-gray-200">
+            {/* User Info */}
             <div className="flex items-center space-x-3 px-4 py-3 border-b">
               {user?.avatarUrl ? (
                 <Image
@@ -197,18 +239,50 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
                 <p className="text-sm text-gray-500">{user?.email || 'guest@example.com'}</p>
               </div>
             </div>
-            <Link href="/profile" className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100">
-              <FontAwesomeIcon icon={faUser} className="text-base" /> View Profile
-            </Link>
-            <Link href="/notifications" className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100">
-              <FontAwesomeIcon icon={faBell} className="text-base" /> Notifications
-            </Link>
-            <Link href="/settings" className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100">
-              <FontAwesomeIcon icon={faGear} className="text-base" /> Settings
-            </Link>
-            <Link href="/logout" className="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-red-600">
-              <FontAwesomeIcon icon={faRightFromBracket} className="text-base" /> Log Out
-            </Link>
+
+            {/* Navigation Items */}
+            <div className="py-2">
+              {menuItems.map((item) => (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                    isActive(item.href)
+                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <FontAwesomeIcon icon={item.icon} className="text-base w-5" />
+                  <span className="font-medium">{item.name}</span>
+                </Link>
+              ))}
+            </div>
+
+            {/* Profile Actions */}
+            <div className="border-t border-gray-200 pt-2">
+              <Link 
+                href="/notifications" 
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <FontAwesomeIcon icon={faBell} className="text-base" /> Notifications
+              </Link>
+              <Link 
+                href="/settings" 
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <FontAwesomeIcon icon={faGear} className="text-base" /> Settings
+              </Link>
+              <Link 
+                href="/logout" 
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-red-600"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <FontAwesomeIcon icon={faRightFromBracket} className="text-base" /> Log Out
+              </Link>
+            </div>
           </div>
         )}
       </div>
