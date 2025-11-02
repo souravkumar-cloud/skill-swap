@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { Search, MessageCircle, X, Send, Star, Filter, Users, Code2, TrendingUp, Loader2 } from 'lucide-react';
+import { Search, MessageCircle, X, Send, Star, Filter, Users, Code2, TrendingUp, Loader2, UserPlus, Check, Bell } from 'lucide-react';
 
 interface User {
   id: string;
@@ -16,6 +16,7 @@ interface User {
   rating?: number;
   connections?: number;
   online?: boolean;
+  friendStatus?: 'none' | 'pending' | 'accepted' | 'sent';
 }
 
 interface Message {
@@ -51,6 +52,7 @@ export default function SkillExchangePage() {
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [sendingRequest, setSendingRequest] = useState<Record<string, boolean>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageCountRef = useRef<Record<string, number>>({});
@@ -143,15 +145,12 @@ export default function SkillExchangePage() {
       const userId = selectedUser.id || selectedUser._id;
       if (!userId) return;
 
-      // Initial fetch
       fetchMessages(userId);
 
-      // Start polling every 2 seconds for real-time updates
       pollingIntervalRef.current = setInterval(() => {
         fetchMessages(userId);
       }, 2000);
 
-      // Cleanup on unmount or when chat closes
       return () => {
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
@@ -180,7 +179,6 @@ export default function SkillExchangePage() {
           time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         })) || [];
 
-        // Only update if message count changed (prevents unnecessary re-renders)
         const currentCount = transformedMessages.length;
         const lastCount = lastMessageCountRef.current[userId] || 0;
 
@@ -191,6 +189,42 @@ export default function SkillExchangePage() {
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
+    }
+  };
+
+  const sendFriendRequest = async (userId: string) => {
+    if (sendingRequest[userId]) return;
+
+    setSendingRequest(prev => ({ ...prev, [userId]: true }));
+
+    try {
+      const response = await fetch('/api/friends/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiverId: userId })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to send friend request');
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update user's friend status
+        setUsers(prev => prev.map(u => 
+          (u.id === userId || u._id === userId) 
+            ? { ...u, friendStatus: 'sent' as const }
+            : u
+        ));
+        alert('Friend request sent successfully!');
+      }
+    } catch (error: any) {
+      console.error('Error sending friend request:', error);
+      alert('Failed to send friend request: ' + error.message);
+    } finally {
+      setSendingRequest(prev => ({ ...prev, [userId]: false }));
     }
   };
 
@@ -214,7 +248,6 @@ export default function SkillExchangePage() {
     const userId = user.id || user._id;
     if (!userId) return;
     
-    // Initialize messages array if it doesn't exist
     if (!messages[userId]) {
       await fetchMessages(userId);
     }
@@ -238,7 +271,6 @@ export default function SkillExchangePage() {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       
-      // Optimistically update UI
       setMessages(prev => ({
         ...prev,
         [userId]: [...(Array.isArray(prev[userId]) ? prev[userId] : []), newMsg]
@@ -270,7 +302,6 @@ export default function SkillExchangePage() {
 
         const data = await response.json();
         
-        // Update with actual message from server
         if (data.success && data.message) {
           setMessages(prev => {
             const userMessages = Array.isArray(prev[userId]) ? prev[userId] : [];
@@ -286,15 +317,11 @@ export default function SkillExchangePage() {
             };
           });
 
-          // Update last message count
           lastMessageCountRef.current[userId] = (lastMessageCountRef.current[userId] || 0) + 1;
-
-          // Fetch messages after a short delay to get any new messages
           setTimeout(() => fetchMessages(userId), 500);
         }
       } catch (error: any) {
         console.error('Error sending message:', error);
-        // Remove the optimistic message on error
         setMessages(prev => ({
           ...prev,
           [userId]: (Array.isArray(prev[userId]) ? prev[userId] : []).filter(m => m.id !== tempId.toString())
@@ -349,7 +376,6 @@ export default function SkillExchangePage() {
     );
   }
 
-  // Get current user messages safely
   const currentMessages = selectedUser 
     ? (Array.isArray(messages[selectedUser.id || selectedUser._id || '']) ? messages[selectedUser.id || selectedUser._id || ''] : [])
     : [];
@@ -366,10 +392,9 @@ export default function SkillExchangePage() {
           <p className="text-lg text-gray-600">Connect with developers and exchange your tech expertise</p>
         </div>
 
-        {/* Enhanced Search and Filter Section */}
+        {/* Search and Filter Section */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-blue-100">
           <div className="flex flex-col gap-4">
-            {/* Large Search Input */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Search by Tech Stack or Name
@@ -397,7 +422,6 @@ export default function SkillExchangePage() {
               </p>
             </div>
 
-            {/* Filter Dropdown */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <Filter className="text-gray-600 w-5 h-5" />
@@ -424,7 +448,6 @@ export default function SkillExchangePage() {
               )}
             </div>
 
-            {/* Active Filters Display */}
             {(searchTerm || selectedSkill !== 'all') && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-semibold text-gray-600">Active filters:</span>
@@ -570,13 +593,59 @@ export default function SkillExchangePage() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => openChat(user)}
-                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg"
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  Start Conversation
-                </button>
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openChat(user)}
+                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    Ask About me!
+                  </button>
+                  
+                  {user.friendStatus === 'accepted' ? (
+                    <button
+                      disabled
+                      className="px-4 py-3 bg-green-100 text-green-700 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed"
+                      title="Already friends"
+                    >
+                      <Check className="w-5 h-5" />
+                    </button>
+                  ) : user.friendStatus === 'sent' ? (
+                    <button
+                      disabled
+                      className="px-4 py-3 bg-orange-100 text-orange-700 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-orange-200"
+                      title="Friend request sent - awaiting response"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-xs">Pending</span>
+                    </button>
+                  ) : user.friendStatus === 'pending' ? (
+                    <button
+                      disabled
+                      className="px-4 py-3 bg-yellow-100 text-yellow-700 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-200"
+                      title="This user sent you a friend request - check notifications"
+                    >
+                      <Bell className="w-5 h-5 animate-pulse" />
+                      <span className="text-xs">Respond</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => sendFriendRequest(user.id || user._id || '')}
+                      disabled={sendingRequest[user.id || user._id || '']}
+                      className="px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Send friend request"
+                    >
+                      {sendingRequest[user.id || user._id || ''] ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <UserPlus className="w-5 h-5" />
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -598,11 +667,10 @@ export default function SkillExchangePage() {
         )}
       </div>
 
-      {/* Chat Modal with Real-time Updates */}
+      {/* Chat Modal */}
       {chatOpen && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl h-[600px] flex flex-col">
-            {/* Chat Header */}
             <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
               <div className="flex items-center gap-3">
                 <div className="relative">
@@ -643,7 +711,6 @@ export default function SkillExchangePage() {
               </button>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
               {currentMessages.length === 0 ? (
                 <div className="text-center text-gray-500 mt-10">
@@ -668,7 +735,6 @@ export default function SkillExchangePage() {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Message Input */}
             <div className="p-4 border-t bg-white">
               <div className="flex gap-2">
                 <input

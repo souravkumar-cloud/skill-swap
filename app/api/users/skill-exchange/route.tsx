@@ -1,46 +1,81 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import User from '@/models/userModel';
+import FriendRequest from '@/models/FriendRequest';
 
-export async function GET(req: NextRequest) {
+export async function GET(req) {
   try {
     const session = await auth();
-    
+
     if (!session || !session.user) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Unauthorized - Please sign in' },
         { status: 401 }
       );
     }
 
     await connectDB();
 
-    // Get all users except the current user
+    // Find current user
+    const currentUser = await User.findOne({ email: session.user.email });
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get all users except current user
     const users = await User.find({
-      email: { $ne: session.user.email },
-    }).select('name email _id image');
+      email: { $ne: session.user.email }
+    }).select('name email image bio skills learning rating connections online').lean();
 
-    // Transform users to match your frontend format
-    const transformedUsers = users.map(user => ({
-      id: user._id.toString(), // Convert ObjectId to string
-      _id: user._id.toString(), // Also include _id for compatibility
-      name: user.name,
-      email: user.email,
-      avatar: user.image || user.name.charAt(0).toUpperCase(),
-      bio: `Developer passionate about learning and sharing knowledge`,
-      skills: ['JavaScript', 'React', 'Node.js'], // You'll need to add these fields to your User model
-      learning: ['Python', 'Machine Learning'], // You'll need to add these fields to your User model
-      rating: 4.5,
-      connections: Math.floor(Math.random() * 100),
-      online: Math.random() > 0.5, // Random for now, you can add real presence tracking
-    }));
+    // Get all friend requests involving the current user
+    const friendRequests = await FriendRequest.find({
+      $or: [
+        { senderId: currentUser._id },
+        { receiverId: currentUser._id }
+      ]
+    }).lean();
 
-    return NextResponse.json(transformedUsers);
-  } catch (error: any) {
-    console.error('Error fetching skill exchange users:', error);
+    // Map friend status for each user
+    const usersWithFriendStatus = users.map(user => {
+      // Check if there's a friend request between current user and this user
+      const request = friendRequests.find(req => 
+        (req.senderId.toString() === currentUser._id.toString() && req.receiverId.toString() === user._id.toString()) ||
+        (req.receiverId.toString() === currentUser._id.toString() && req.senderId.toString() === user._id.toString())
+      );
+
+      let friendStatus = 'none';
+      
+      if (request) {
+        if (request.status === 'accepted') {
+          friendStatus = 'accepted';
+        } else if (request.status === 'pending') {
+          // Check if current user sent or received the request
+          if (request.senderId.toString() === currentUser._id.toString()) {
+            friendStatus = 'sent';
+          } else {
+            friendStatus = 'pending';
+          }
+        }
+      }
+
+      return {
+        ...user,
+        id: user._id.toString(),
+        avatar: user.image || user.name?.charAt(0) || '?', // Use image field from your User model
+        friendStatus
+      };
+    });
+
+    return NextResponse.json(usersWithFriendStatus);
+
+  } catch (error) {
+    console.error('Error fetching users for skill exchange:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch users' },
+      { error: 'Failed to fetch users', details: error.message },
       { status: 500 }
     );
   }

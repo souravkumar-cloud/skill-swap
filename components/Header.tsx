@@ -35,10 +35,24 @@ interface MenuItem {
   icon: any;
 }
 
+interface FriendRequest {
+  _id: string;
+  senderId: {
+    _id: string;
+    name: string;
+    email: string;
+    avatar: string;
+  };
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+}
+
 const Header: React.FC<NavbarProps> = ({ user }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isBellOpen, setIsBellOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [recentRequests, setRecentRequests] = useState<FriendRequest[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -46,13 +60,36 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
   const menuItems: MenuItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: faHome },
     { name: 'Skill Exchange', href: '/skill-exchange', icon: faArrowRightArrowLeft },
-    { name: 'Learning Hub', href: '/learning-hub', icon: faGraduationCap },
-    { name: 'Community', href: '/community', icon: faUsers },
-    { name: 'Resources', href: '/resources', icon: faBookOpen },
+    { name: 'friends', href: '/friends', icon: faGraduationCap },
+    { name: 'wallet', href: '/wallet', icon: faBookOpen },
     { name: 'Profile', href: '/profile', icon: faUser },
   ];
 
   const isActive = (href: string) => pathname === href;
+
+  // Fetch notification count
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const response = await fetch('/api/friends/requests');
+        if (response.ok) {
+          const data = await response.json();
+          const pendingRequests = data.requests?.filter((req: FriendRequest) => req.status === 'pending') || [];
+          setNotificationCount(pendingRequests.length);
+          setRecentRequests(pendingRequests.slice(0, 3)); // Show only 3 most recent
+        }
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
+    };
+
+    if (user) {
+      fetchNotifications();
+      // Refresh every 30 seconds (optional)
+      const interval = setInterval(fetchNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -66,6 +103,18 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const getTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+    return date.toLocaleDateString();
+  };
 
   return (
     <nav className="sticky top-0 z-50 bg-white shadow-md">
@@ -103,36 +152,67 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
                 className="relative p-2 text-gray-600 hover:text-blue-500 transition-colors focus:outline-none"
               >
                 <FontAwesomeIcon icon={faBell} className="text-2xl" />
-                {/* Notification badge */}
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                {/* Notification badge with count */}
+                {notificationCount > 0 && (
+                  <span className="absolute top-0 right-0 min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5">
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </span>
+                )}
               </button>
 
               {isBellOpen && (
                 <div className="origin-top-right absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
                   <div className="py-1">
-                    <div className="px-4 py-3 border-b border-gray-200">
+                    <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                       <p className="font-semibold text-gray-900">Notifications</p>
+                      {notificationCount > 0 && (
+                        <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                          {notificationCount}
+                        </span>
+                      )}
                     </div>
                     <div className="max-h-96 overflow-y-auto">
-                      {/* Sample notifications */}
-                      <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b">
-                        <p className="text-sm font-medium text-gray-900">New skill match!</p>
-                        <p className="text-xs text-gray-500 mt-1">John wants to learn React from you</p>
-                        <p className="text-xs text-gray-400 mt-1">2 hours ago</p>
-                      </div>
-                      <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b">
-                        <p className="text-sm font-medium text-gray-900">Message received</p>
-                        <p className="text-xs text-gray-500 mt-1">Sarah sent you a message</p>
-                        <p className="text-xs text-gray-400 mt-1">5 hours ago</p>
-                      </div>
-                      <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
-                        <p className="text-sm font-medium text-gray-900">Profile viewed</p>
-                        <p className="text-xs text-gray-500 mt-1">Mike viewed your profile</p>
-                        <p className="text-xs text-gray-400 mt-1">1 day ago</p>
-                      </div>
+                      {notificationCount === 0 ? (
+                        <div className="px-4 py-8 text-center text-gray-500">
+                          <FontAwesomeIcon icon={faBell} className="text-3xl text-gray-300 mb-2" />
+                          <p className="text-sm">No new notifications</p>
+                        </div>
+                      ) : (
+                        recentRequests.map((request) => (
+                          <Link
+                            key={request._id}
+                            href="/notifications"
+                            onClick={() => setIsBellOpen(false)}
+                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b block"
+                          >
+                            <div className="flex items-center gap-3">
+                              {request.senderId.avatar?.startsWith('http') ? (
+                                <img 
+                                  src={request.senderId.avatar} 
+                                  alt={request.senderId.name}
+                                  className="w-10 h-10 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+                                  {request.senderId.name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">Friend Request</p>
+                                <p className="text-xs text-gray-500 mt-1">{request.senderId.name} wants to connect</p>
+                                <p className="text-xs text-gray-400 mt-1">{getTimeAgo(request.createdAt)}</p>
+                              </div>
+                            </div>
+                          </Link>
+                        ))
+                      )}
                     </div>
                     <div className="px-4 py-2 border-t border-gray-200 text-center">
-                      <Link href="/notifications" className="text-sm text-blue-500 hover:text-blue-600">
+                      <Link 
+                        href="/notifications" 
+                        onClick={() => setIsBellOpen(false)}
+                        className="text-sm text-blue-500 hover:text-blue-600 font-medium"
+                      >
                         View all notifications
                       </Link>
                     </div>
@@ -206,7 +286,17 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden">
+          <div className="md:hidden flex items-center gap-3">
+            {/* Mobile Notification Bell */}
+            <Link href="/notifications" className="relative p-2 text-gray-600">
+              <FontAwesomeIcon icon={faBell} className="text-xl" />
+              {notificationCount > 0 && (
+                <span className="absolute top-0 right-0 min-w-[18px] h-[18px] bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1">
+                  {notificationCount > 99 ? '99+' : notificationCount}
+                </span>
+              )}
+            </Link>
+
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="text-gray-600 hover:text-blue-500 focus:outline-none p-2"
@@ -263,10 +353,18 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
             <div className="border-t border-gray-200 pt-2">
               <Link 
                 href="/notifications" 
-                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
+                className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <FontAwesomeIcon icon={faBell} className="text-base" /> Notifications
+                <div className="flex items-center gap-3">
+                  <FontAwesomeIcon icon={faBell} className="text-base" /> 
+                  <span>Notifications</span>
+                </div>
+                {notificationCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[24px] text-center">
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </span>
+                )}
               </Link>
               <Link 
                 href="/settings" 
