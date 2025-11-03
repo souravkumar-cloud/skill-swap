@@ -11,8 +11,8 @@ interface User {
   email: string;
   avatar: string;
   bio: string;
-  skills: string[];
-  learning: string[];
+  skills?: string[];
+  learning?: string[];
   rating?: number;
   connections?: number;
   online?: boolean;
@@ -231,12 +231,12 @@ export default function SkillExchangePage() {
   const filteredUsers = users.filter((user: User) => {
     const matchesSearch = searchTerm === '' || 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.skills.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      user.learning.some((l: string) => l.toLowerCase().includes(searchTerm.toLowerCase()));
+      (Array.isArray(user.skills) && user.skills.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+      (Array.isArray(user.learning) && user.learning.some((l: string) => l.toLowerCase().includes(searchTerm.toLowerCase())));
     
     const matchesSkill = selectedSkill === 'all' || 
-      user.skills.includes(selectedSkill) || 
-      user.learning.includes(selectedSkill);
+      (Array.isArray(user.skills) && user.skills.includes(selectedSkill)) || 
+      (Array.isArray(user.learning) && user.learning.includes(selectedSkill));
     
     return matchesSearch && matchesSkill;
   });
@@ -550,7 +550,7 @@ export default function SkillExchangePage() {
                     <span className="text-green-600">✓</span> Can teach:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {user.skills && user.skills.length > 0 ? (
+                    {user.skills && Array.isArray(user.skills) && user.skills.length > 0 ? (
                       <>
                         {user.skills.slice(0, 4).map((skill: string) => (
                           <span key={skill} className="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs rounded-full font-medium border border-blue-200">
@@ -574,7 +574,7 @@ export default function SkillExchangePage() {
                     <span className="text-orange-600">→</span> Wants to learn:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {user.learning && user.learning.length > 0 ? (
+                    {user.learning && Array.isArray(user.learning) && user.learning.length > 0 ? (
                       <>
                         {user.learning.slice(0, 3).map((skill: string) => (
                           <span key={skill} className="px-2.5 py-1 bg-green-50 text-green-700 text-xs rounded-full font-medium border border-green-200">
