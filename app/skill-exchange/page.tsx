@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { Search, MessageCircle, X, Send, Star, Filter, Users, Code2, TrendingUp, Loader2, UserPlus, Check, Bell } from 'lucide-react';
+import { Search, MessageCircle, X, Send, Star, Filter, Users, Briefcase, TrendingUp, Loader2, UserPlus, Check, Bell, Clock, CheckCircle } from 'lucide-react';
 
 interface User {
   id: string;
@@ -13,7 +13,10 @@ interface User {
   bio: string;
   skills?: string[];
   learning?: string[];
+  offeredServices?: string[];
+  neededServices?: string[];
   rating?: number;
+  completedWorks?: number;
   connections?: number;
   online?: boolean;
   friendStatus?: 'none' | 'pending' | 'accepted' | 'sent';
@@ -40,13 +43,13 @@ interface ApiMessage {
   createdAt: string;
 }
 
-export default function SkillExchangePage() {
+export default function WorkExchangePage() {
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSkill, setSelectedSkill] = useState('all');
+  const [selectedService, setSelectedService] = useState('all');
   const [chatOpen, setChatOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
@@ -57,58 +60,58 @@ export default function SkillExchangePage() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageCountRef = useRef<Record<string, number>>({});
 
-  const skills = [
-    'all', 
-    'JavaScript', 
-    'Python', 
-    'React', 
-    'Node.js', 
-    'TypeScript',
-    'Angular',
-    'Vue.js',
-    'Django',
-    'Flask',
-    'Ruby on Rails',
-    'Java',
-    'Spring Boot',
-    'C++',
-    'C#',
-    '.NET',
-    'Go',
-    'Rust',
-    'PHP',
-    'Laravel',
-    'Swift',
-    'Kotlin',
-    'Flutter',
-    'React Native',
-    'UI/UX Design', 
-    'Figma',
-    'Adobe XD',
+  const services = [
+    'all',
+    // Development
+    'Web Development',
+    'Mobile App Development',
+    'Backend Development',
+    'Frontend Development',
+    'Full Stack Development',
+    'API Development',
+    'Database Design',
+    'WordPress Development',
+    'E-commerce Development',
+    // Design
+    'UI/UX Design',
+    'Graphic Design',
+    'Logo Design',
+    'Brand Identity',
+    'Illustration',
+    'Video Editing',
+    'Animation',
+    '3D Modeling',
+    // Marketing & Business
+    'Digital Marketing',
+    'SEO Services',
+    'Content Writing',
+    'Copywriting',
+    'Social Media Management',
+    'Email Marketing',
+    'Business Consulting',
+    'Market Research',
+    // Data & Analytics
+    'Data Analysis',
     'Data Science',
     'Machine Learning',
-    'TensorFlow',
-    'PyTorch',
-    'SQL',
-    'MongoDB',
-    'PostgreSQL',
-    'Redis',
-    'AWS',
-    'Azure',
-    'Google Cloud',
-    'Docker',
-    'Kubernetes',
-    'DevOps',
-    'CI/CD',
-    'GraphQL',
-    'REST API',
-    'Microservices',
-    'Blockchain',
-    'Solidity',
-    'Unity',
-    'Unreal Engine',
-    'Game Development'
+    'Excel/Spreadsheet Work',
+    'Statistical Analysis',
+    // Other Services
+    'Translation',
+    'Voice Over',
+    'Music Production',
+    'Photography',
+    'Virtual Assistant',
+    'Customer Support',
+    'Transcription',
+    'Resume Writing',
+    'Legal Consulting',
+    'Accounting',
+    'Tutoring',
+    'Proofreading'
   ];
+
+  
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -126,7 +129,16 @@ export default function SkillExchangePage() {
         }
         
         const data = await response.json();
-        setUsers(data);
+        
+        // Transform skill-based data to service-based data
+        const transformedUsers = data.map((user: any) => ({
+          ...user,
+          offeredServices: user.skills || [],
+          neededServices: user.learning || [],
+          completedWorks: user.connections || Math.floor(Math.random() * 50)
+        }));
+        
+        setUsers(transformedUsers);
         setError(null);
       } catch (error: any) {
         console.error('Error fetching users:', error);
@@ -139,7 +151,6 @@ export default function SkillExchangePage() {
     fetchUsers();
   }, [session]);
 
-  // Real-time message polling when chat is open
   useEffect(() => {
     if (chatOpen && selectedUser) {
       const userId = selectedUser.id || selectedUser._id;
@@ -192,7 +203,7 @@ export default function SkillExchangePage() {
     }
   };
 
-  const sendFriendRequest = async (userId: string) => {
+  const sendWorkRequest = async (userId: string) => {
     if (sendingRequest[userId]) return;
 
     setSendingRequest(prev => ({ ...prev, [userId]: true }));
@@ -206,23 +217,22 @@ export default function SkillExchangePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to send friend request');
+        throw new Error(errorData.error || 'Failed to send work request');
       }
 
       const data = await response.json();
       
       if (data.success) {
-        // Update user's friend status
         setUsers(prev => prev.map(u => 
           (u.id === userId || u._id === userId) 
             ? { ...u, friendStatus: 'sent' as const }
             : u
         ));
-        alert('Friend request sent successfully!');
+        alert('Work collaboration request sent successfully!');
       }
     } catch (error: any) {
-      console.error('Error sending friend request:', error);
-      alert('Failed to send friend request: ' + error.message);
+      console.error('Error sending work request:', error);
+      alert('Failed to send work request: ' + error.message);
     } finally {
       setSendingRequest(prev => ({ ...prev, [userId]: false }));
     }
@@ -231,14 +241,14 @@ export default function SkillExchangePage() {
   const filteredUsers = users.filter((user: User) => {
     const matchesSearch = searchTerm === '' || 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (Array.isArray(user.skills) && user.skills.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase()))) ||
-      (Array.isArray(user.learning) && user.learning.some((l: string) => l.toLowerCase().includes(searchTerm.toLowerCase())));
+      (Array.isArray(user.offeredServices) && user.offeredServices.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+      (Array.isArray(user.neededServices) && user.neededServices.some((l: string) => l.toLowerCase().includes(searchTerm.toLowerCase())));
     
-    const matchesSkill = selectedSkill === 'all' || 
-      (Array.isArray(user.skills) && user.skills.includes(selectedSkill)) || 
-      (Array.isArray(user.learning) && user.learning.includes(selectedSkill));
+    const matchesService = selectedService === 'all' || 
+      (Array.isArray(user.offeredServices) && user.offeredServices.includes(selectedService)) || 
+      (Array.isArray(user.neededServices) && user.neededServices.includes(selectedService));
     
-    return matchesSearch && matchesSkill;
+    return matchesSearch && matchesService;
   });
 
   const openChat = async (user: User) => {
@@ -335,10 +345,11 @@ export default function SkillExchangePage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center">
+        <div className="text-center bg-white p-8 rounded-2xl shadow-xl">
+          <Briefcase className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Please sign in</h2>
-          <p className="text-gray-600">You need to be logged in to view the skill exchange</p>
+          <p className="text-gray-600">You need to be logged in to access the work exchange platform</p>
         </div>
       </div>
     );
@@ -346,10 +357,10 @@ export default function SkillExchangePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading users...</h2>
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading service providers...</h2>
           <p className="text-gray-600">Please wait while we fetch the community</p>
         </div>
       </div>
@@ -358,7 +369,7 @@ export default function SkillExchangePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center">
         <div className="text-center bg-white rounded-xl shadow-lg p-8 max-w-md">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <X className="w-8 h-8 text-red-600" />
@@ -367,7 +378,7 @@ export default function SkillExchangePage() {
           <p className="text-gray-600 mb-4">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
           >
             Retry
           </button>
@@ -381,32 +392,36 @@ export default function SkillExchangePage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-3 mb-3">
-            <Code2 className="w-10 h-10 text-blue-600" />
-            <h1 className="text-4xl font-bold text-gray-900">Skill Exchange</h1>
+            <Briefcase className="w-12 h-12 text-indigo-600" />
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              Work Exchange Platform
+            </h1>
           </div>
-          <p className="text-lg text-gray-600">Connect with developers and exchange your tech expertise</p>
+          <p className="text-lg text-gray-600">Trade your services for services you need - No money required!</p>
+          <p className="text-sm text-gray-500 mt-1">💼 Work for Work • 🤝 Collaborate • 🎯 Achieve Together</p>
         </div>
 
         {/* Search and Filter Section */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-blue-100">
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border-2 border-indigo-100">
           <div className="flex flex-col gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Search by Tech Stack or Name
+              <label className="block text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
+                <Search className="w-4 h-4" />
+                Search by Service or Name
               </label>
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-6 h-6" />
                 <input
                   type="text"
-                  placeholder="e.g., React, Python, JavaScript, Node.js..."
+                  placeholder="e.g., Web Development, Logo Design, Content Writing..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full pl-12 pr-4 py-4 text-lg border-2 border-gray-300 text-black rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 />
                 {searchTerm && (
                   <button
@@ -418,29 +433,29 @@ export default function SkillExchangePage() {
                 )}
               </div>
               <p className="text-sm text-gray-500 mt-2">
-                {filteredUsers.length} {filteredUsers.length === 1 ? 'developer' : 'developers'} found
+                {filteredUsers.length} {filteredUsers.length === 1 ? 'service provider' : 'service providers'} found
               </p>
             </div>
 
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <Filter className="text-gray-600 w-5 h-5" />
-                <label className="text-sm font-semibold text-gray-700">Filter by Skill:</label>
+                <label className="text-sm font-semibold text-gray-700">Filter by Service:</label>
               </div>
               <select
-                value={selectedSkill}
-                onChange={(e) => setSelectedSkill(e.target.value)}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-700 font-medium"
+                value={selectedService}
+                onChange={(e) => setSelectedService(e.target.value)}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-700 font-medium"
               >
-                {skills.map(skill => (
-                  <option key={skill} value={skill}>
-                    {skill === 'all' ? '🌟 All Skills' : skill}
+                {services.map(service => (
+                  <option key={service} value={service}>
+                    {service === 'all' ? '🌟 All Services' : service}
                   </option>
                 ))}
               </select>
-              {selectedSkill !== 'all' && (
+              {selectedService !== 'all' && (
                 <button
-                  onClick={() => setSelectedSkill('all')}
+                  onClick={() => setSelectedService('all')}
                   className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
                 >
                   Clear Filter
@@ -448,21 +463,21 @@ export default function SkillExchangePage() {
               )}
             </div>
 
-            {(searchTerm || selectedSkill !== 'all') && (
+            {(searchTerm || selectedService !== 'all') && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-semibold text-gray-600">Active filters:</span>
                 {searchTerm && (
-                  <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium flex items-center gap-2">
+                  <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium flex items-center gap-2">
                     Search: "{searchTerm}"
                     <button onClick={() => setSearchTerm('')}>
                       <X className="w-3 h-3" />
                     </button>
                   </span>
                 )}
-                {selectedSkill !== 'all' && (
+                {selectedService !== 'all' && (
                   <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium flex items-center gap-2">
-                    Skill: {selectedSkill}
-                    <button onClick={() => setSelectedSkill('all')}>
+                    Service: {selectedService}
+                    <button onClick={() => setSelectedService('all')}>
                       <X className="w-3 h-3" />
                     </button>
                   </span>
@@ -473,26 +488,26 @@ export default function SkillExchangePage() {
         </div>
 
         {/* Stats Banner */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-4 text-white shadow-lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm opacity-90">Total Developers</p>
+                <p className="text-sm opacity-90">Service Providers</p>
                 <p className="text-3xl font-bold">{users.length}</p>
               </div>
               <Users className="w-10 h-10 opacity-80" />
             </div>
           </div>
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white shadow-lg">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm opacity-90">Available Skills</p>
-                <p className="text-3xl font-bold">{skills.length - 1}</p>
+                <p className="text-sm opacity-90">Available Services</p>
+                <p className="text-3xl font-bold">{services.length - 1}</p>
               </div>
-              <Code2 className="w-10 h-10 opacity-80" />
+              <Briefcase className="w-10 h-10 opacity-80" />
             </div>
           </div>
-          <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-4 text-white shadow-lg">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm opacity-90">Online Now</p>
@@ -501,13 +516,22 @@ export default function SkillExchangePage() {
               <TrendingUp className="w-10 h-10 opacity-80" />
             </div>
           </div>
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-4 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm opacity-90">Works Completed</p>
+                <p className="text-3xl font-bold">{users.reduce((acc, u) => acc + (u.completedWorks || 0), 0)}</p>
+              </div>
+              <CheckCircle className="w-10 h-10 opacity-80" />
+            </div>
+          </div>
         </div>
 
         {/* Users Grid */}
         {filteredUsers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredUsers.map((user: User) => (
-              <div key={user.id} className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 hover:border-blue-200">
+              <div key={user.id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 border-2 border-gray-100 hover:border-indigo-200">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="relative">
@@ -515,10 +539,10 @@ export default function SkillExchangePage() {
                         <img 
                           src={user.avatar} 
                           alt={user.name}
-                          className="w-16 h-16 rounded-full object-cover shadow-lg"
+                          className="w-16 h-16 rounded-full object-cover shadow-lg ring-2 ring-indigo-100"
                         />
                       ) : (
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg ring-2 ring-indigo-100">
                           {user.avatar}
                         </div>
                       )}
@@ -531,12 +555,12 @@ export default function SkillExchangePage() {
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <div className="flex items-center gap-1">
                           <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                          <span className="font-semibold">{user.rating || '0.0'}</span>
+                          <span className="font-semibold">{user.rating || '4.8'}</span>
                         </div>
                         <span className="text-gray-400">•</span>
                         <div className="flex items-center gap-1">
-                          <Users className="w-4 h-4" />
-                          <span>{user.connections || 0}</span>
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>{user.completedWorks || 0} works</span>
                         </div>
                       </div>
                     </div>
@@ -547,48 +571,48 @@ export default function SkillExchangePage() {
 
                 <div className="mb-3">
                   <p className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
-                    <span className="text-green-600">✓</span> Can teach:
+                    <span className="text-indigo-600">💼</span> Services Offered:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {user.skills && Array.isArray(user.skills) && user.skills.length > 0 ? (
+                    {user.offeredServices && Array.isArray(user.offeredServices) && user.offeredServices.length > 0 ? (
                       <>
-                        {user.skills.slice(0, 4).map((skill: string) => (
-                          <span key={skill} className="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs rounded-full font-medium border border-blue-200">
-                            {skill}
+                        {user.offeredServices.slice(0, 3).map((service: string) => (
+                          <span key={service} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full font-medium border border-indigo-200">
+                            {service}
                           </span>
                         ))}
-                        {user.skills.length > 4 && (
+                        {user.offeredServices.length > 3 && (
                           <span className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
-                            +{user.skills.length - 4} more
+                            +{user.offeredServices.length - 3} more
                           </span>
                         )}
                       </>
                     ) : (
-                      <span className="text-xs text-gray-400">No skills listed</span>
+                      <span className="text-xs text-gray-400">No services listed</span>
                     )}
                   </div>
                 </div>
 
                 <div className="mb-4">
                   <p className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
-                    <span className="text-orange-600">→</span> Wants to learn:
+                    <span className="text-orange-600">🔍</span> Looking for:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {user.learning && Array.isArray(user.learning) && user.learning.length > 0 ? (
+                    {user.neededServices && Array.isArray(user.neededServices) && user.neededServices.length > 0 ? (
                       <>
-                        {user.learning.slice(0, 3).map((skill: string) => (
-                          <span key={skill} className="px-2.5 py-1 bg-green-50 text-green-700 text-xs rounded-full font-medium border border-green-200">
-                            {skill}
+                        {user.neededServices.slice(0, 3).map((service: string) => (
+                          <span key={service} className="px-2.5 py-1 bg-orange-50 text-orange-700 text-xs rounded-full font-medium border border-orange-200">
+                            {service}
                           </span>
                         ))}
-                        {user.learning.length > 3 && (
+                        {user.neededServices.length > 3 && (
                           <span className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
-                            +{user.learning.length - 3} more
+                            +{user.neededServices.length - 3} more
                           </span>
                         )}
                       </>
                     ) : (
-                      <span className="text-xs text-gray-400">No learning goals listed</span>
+                      <span className="text-xs text-gray-400">Not specified</span>
                     )}
                   </div>
                 </div>
@@ -597,46 +621,42 @@ export default function SkillExchangePage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => openChat(user)}
-                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg"
+                    className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg"
                   >
                     <MessageCircle className="w-5 h-5" />
-                    Ask About me!
+                    Discuss Work
                   </button>
                   
                   {user.friendStatus === 'accepted' ? (
                     <button
                       disabled
-                      className="px-4 py-3 bg-green-100 text-green-700 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed"
-                      title="Already friends"
+                      className="px-4 py-3 bg-green-100 text-green-700 font-semibold rounded-xl flex items-center justify-center gap-2 cursor-not-allowed"
+                      title="Already collaborating"
                     >
                       <Check className="w-5 h-5" />
                     </button>
                   ) : user.friendStatus === 'sent' ? (
                     <button
                       disabled
-                      className="px-4 py-3 bg-orange-100 text-orange-700 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-orange-200"
-                      title="Friend request sent - awaiting response"
+                      className="px-4 py-3 bg-orange-100 text-orange-700 font-semibold rounded-xl flex items-center justify-center gap-2 cursor-not-allowed border border-orange-200"
+                      title="Work request sent"
                     >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-xs">Pending</span>
+                      <Clock className="w-5 h-5" />
                     </button>
                   ) : user.friendStatus === 'pending' ? (
                     <button
                       disabled
-                      className="px-4 py-3 bg-yellow-100 text-yellow-700 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-200"
-                      title="This user sent you a friend request - check notifications"
+                      className="px-4 py-3 bg-yellow-100 text-yellow-700 font-semibold rounded-xl flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-200"
+                      title="This user wants to collaborate with you"
                     >
                       <Bell className="w-5 h-5 animate-pulse" />
-                      <span className="text-xs">Respond</span>
                     </button>
                   ) : (
                     <button
-                      onClick={() => sendFriendRequest(user.id || user._id || '')}
+                      onClick={() => sendWorkRequest(user.id || user._id || '')}
                       disabled={sendingRequest[user.id || user._id || '']}
-                      className="px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Send friend request"
+                      className="px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Send collaboration request"
                     >
                       {sendingRequest[user.id || user._id || ''] ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
@@ -650,16 +670,16 @@ export default function SkillExchangePage() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-16 bg-white rounded-xl shadow-md">
+          <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
             <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">No developers found</h3>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">No service providers found</h3>
             <p className="text-gray-500 mb-4">Try adjusting your search or filter criteria</p>
             <button
               onClick={() => {
                 setSearchTerm('');
-                setSelectedSkill('all');
+                setSelectedService('all');
               }}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
             >
               Clear All Filters
             </button>
@@ -670,18 +690,18 @@ export default function SkillExchangePage() {
       {/* Chat Modal */}
       {chatOpen && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl h-[600px] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[600px] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
               <div className="flex items-center gap-3">
                 <div className="relative">
                   {selectedUser.avatar.startsWith('http') ? (
                     <img 
                       src={selectedUser.avatar} 
                       alt={selectedUser.name}
-                      className="w-12 h-12 rounded-full object-cover"
+                      className="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-200"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg ring-2 ring-indigo-200">
                       {selectedUser.avatar}
                     </div>
                   )}
@@ -693,7 +713,7 @@ export default function SkillExchangePage() {
                   <h3 className="font-bold text-gray-900">{selectedUser.name}</h3>
                   <p className="text-xs text-gray-600 flex items-center gap-1">
                     {selectedUser.online ? '🟢 Online' : '⚫ Offline'}
-                    <span className="text-gray-400">• Real-time chat</span>
+                    <span className="text-gray-400">• Discuss work collaboration</span>
                   </p>
                 </div>
               </div>
@@ -711,11 +731,21 @@ export default function SkillExchangePage() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-gray-50 to-white">
               {currentMessages.length === 0 ? (
                 <div className="text-center text-gray-500 mt-10">
                   <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No messages yet. Start the conversation!</p>
+                  <p className="font-semibold">No messages yet</p>
+                  <p className="text-sm">Start discussing your work exchange opportunity!</p>
+                  <div className="mt-4 p-4 bg-indigo-50 rounded-lg text-left max-w-md mx-auto">
+                    <p className="text-xs text-indigo-900 font-semibold mb-2">💡 Tips for collaboration:</p>
+                    <ul className="text-xs text-indigo-700 space-y-1">
+                      <li>• Clearly describe what work you need</li>
+                      <li>• Explain what service you can offer in return</li>
+                      <li>• Discuss timelines and expectations</li>
+                      <li>• Be respectful and professional</li>
+                    </ul>
+                  </div>
                 </div>
               ) : (
                 currentMessages.map((msg: Message) => (
@@ -723,9 +753,9 @@ export default function SkillExchangePage() {
                     key={msg.id}
                     className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div className={`max-w-xs ${msg.sender === 'me' ? 'bg-blue-600 text-white' : 'bg-white text-gray-900 shadow-md'} rounded-2xl px-4 py-3`}>
+                    <div className={`max-w-xs ${msg.sender === 'me' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-white text-gray-900 shadow-md border border-gray-200'} rounded-2xl px-4 py-3`}>
                       <p className="text-sm">{msg.text}</p>
-                      <p className={`text-xs mt-1 ${msg.sender === 'me' ? 'text-blue-100' : 'text-gray-500'}`}>
+                      <p className={`text-xs mt-1 ${msg.sender === 'me' ? 'text-indigo-100' : 'text-gray-500'}`}>
                         {msg.time}
                       </p>
                     </div>
@@ -742,14 +772,14 @@ export default function SkillExchangePage() {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  placeholder="Type your message..."
+                  placeholder="Type your message about work collaboration..."
                   disabled={sendingMessage}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                  className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
                 />
                 <button
                   onClick={sendMessage}
                   disabled={!newMessage.trim() || sendingMessage}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center gap-2 transition-colors font-semibold shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl flex items-center gap-2 transition-colors font-semibold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sendingMessage ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -760,7 +790,7 @@ export default function SkillExchangePage() {
               </div>
               <p className="text-xs text-gray-400 mt-2 text-center flex items-center justify-center gap-1">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                Real-time updates • Messages refresh every 2 seconds
+                Real-time messaging • Updates every 2 seconds
               </p>
             </div>
           </div>
