@@ -1,22 +1,43 @@
 'use client';
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { Search, MessageCircle, X, Send, Star, Filter, Users, Briefcase, TrendingUp, Loader2, UserPlus, Check, Bell, Clock, CheckCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {Loader2} from 'lucide-react';
+import {
+  faSearch,
+  faFilter,
+  faTimes,
+  faUsers,
+  faBriefcase,
+  faChartLine,
+  faSpinner,
+  faMessage,
+  faPaperPlane,
+  faStar,
+  faCheckCircle,
+  faUserPlus,
+  faClock,
+  faBell,
+  faCheck,
+  faHandshake,
+  faLightbulb,
+  faExchangeAlt,
+  faSync
+} from '@fortawesome/free-solid-svg-icons';
 
 interface User {
   id: string;
   _id?: string;
   name: string;
   email: string;
+  image?: string;
   avatar: string;
-  bio: string;
+  bio?: string;
   skills?: string[];
   learning?: string[];
-  offeredServices?: string[];
-  neededServices?: string[];
   rating?: number;
-  completedWorks?: number;
+  completedProjects?: number;
   connections?: number;
   online?: boolean;
   friendStatus?: 'none' | 'pending' | 'accepted' | 'sent';
@@ -43,26 +64,36 @@ interface ApiMessage {
   createdAt: string;
 }
 
-export default function WorkExchangePage() {
+export default function SkillExchangePage() {
   const { data: session } = useSession();
+  const router = useRouter();
+
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Search and Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedService, setSelectedService] = useState('all');
+  
+  // Chat
   const [chatOpen, setChatOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  
+  // Friend Request
   const [sendingRequest, setSendingRequest] = useState<Record<string, boolean>>({});
+  
   const chatEndRef = useRef<HTMLDivElement>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageCountRef = useRef<Record<string, number>>({});
 
+  // Available Services List
   const services = [
     'all',
-    // Development
     'Web Development',
     'Mobile App Development',
     'Backend Development',
@@ -72,7 +103,6 @@ export default function WorkExchangePage() {
     'Database Design',
     'WordPress Development',
     'E-commerce Development',
-    // Design
     'UI/UX Design',
     'Graphic Design',
     'Logo Design',
@@ -81,7 +111,6 @@ export default function WorkExchangePage() {
     'Video Editing',
     'Animation',
     '3D Modeling',
-    // Marketing & Business
     'Digital Marketing',
     'SEO Services',
     'Content Writing',
@@ -90,67 +119,68 @@ export default function WorkExchangePage() {
     'Email Marketing',
     'Business Consulting',
     'Market Research',
-    // Data & Analytics
     'Data Analysis',
     'Data Science',
     'Machine Learning',
-    'Excel/Spreadsheet Work',
-    'Statistical Analysis',
-    // Other Services
     'Translation',
     'Voice Over',
     'Music Production',
     'Photography',
     'Virtual Assistant',
-    'Customer Support',
-    'Transcription',
-    'Resume Writing',
-    'Legal Consulting',
-    'Accounting',
-    'Tutoring',
-    'Proofreading'
+    'Customer Support'
   ];
 
-  
+  // Fetch users data
+  const fetchUsers = async (showRefreshing = false) => {
+    if (showRefreshing) setRefreshing(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/users/skill-exchange');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch users');
+      }
+      
+      const data = await response.json();
+      
+      // Transform and enrich user data
+      const enrichedUsers = data.map((user: any) => ({
+        id: user._id || user.id,
+        _id: user._id,
+        name: user.name || 'Anonymous',
+        email: user.email,
+        image: user.image,
+        avatar: user.image || user.name?.charAt(0).toUpperCase() || '?',
+        bio: user.bio || `Hi, I'm ${user.name || 'a user'}. Let's exchange skills!`,
+        skills: user.skills || [],
+        learning: user.learning || [],
+        rating: user.rating || (4.5 + Math.random() * 0.5),
+        completedProjects: user.completedProjects || Math.floor(Math.random() * 50),
+        connections: user.connections || 0,
+        online: user.online || Math.random() > 0.5,
+        friendStatus: user.friendStatus || 'none'
+      }));
+      
+      setUsers(enrichedUsers);
+    } catch (error: any) {
+      console.error('Error fetching users:', error);
+      setError(error.message || 'Failed to load users');
+    } finally {
+      setLoading(false);
+      if (showRefreshing) setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      if (!session) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const response = await fetch('/api/users/skill-exchange');
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch users');
-        }
-        
-        const data = await response.json();
-        
-        // Transform skill-based data to service-based data
-        const transformedUsers = data.map((user: any) => ({
-          ...user,
-          offeredServices: user.skills || [],
-          neededServices: user.learning || [],
-          completedWorks: user.connections || Math.floor(Math.random() * 50)
-        }));
-        
-        setUsers(transformedUsers);
-        setError(null);
-      } catch (error: any) {
-        console.error('Error fetching users:', error);
-        setError(error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUsers();
+    if (session?.user) {
+      fetchUsers();
+    } else {
+      setLoading(false);
+    }
   }, [session]);
 
+  // Chat polling
   useEffect(() => {
     if (chatOpen && selectedUser) {
       const userId = selectedUser.id || selectedUser._id;
@@ -171,6 +201,7 @@ export default function WorkExchangePage() {
     }
   }, [chatOpen, selectedUser, session]);
 
+  // Auto scroll chat
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -203,6 +234,10 @@ export default function WorkExchangePage() {
     }
   };
 
+  const handleRefresh = () => {
+    fetchUsers(true);
+  };
+
   const sendWorkRequest = async (userId: string) => {
     if (sendingRequest[userId]) return;
 
@@ -228,28 +263,15 @@ export default function WorkExchangePage() {
             ? { ...u, friendStatus: 'sent' as const }
             : u
         ));
-        alert('Work collaboration request sent successfully!');
+        alert('✅ Work collaboration request sent successfully!');
       }
     } catch (error: any) {
       console.error('Error sending work request:', error);
-      alert('Failed to send work request: ' + error.message);
+      alert('❌ ' + error.message);
     } finally {
       setSendingRequest(prev => ({ ...prev, [userId]: false }));
     }
   };
-
-  const filteredUsers = users.filter((user: User) => {
-    const matchesSearch = searchTerm === '' || 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (Array.isArray(user.offeredServices) && user.offeredServices.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase()))) ||
-      (Array.isArray(user.neededServices) && user.neededServices.some((l: string) => l.toLowerCase().includes(searchTerm.toLowerCase())));
-    
-    const matchesService = selectedService === 'all' || 
-      (Array.isArray(user.offeredServices) && user.offeredServices.includes(selectedService)) || 
-      (Array.isArray(user.neededServices) && user.neededServices.includes(selectedService));
-    
-    return matchesSearch && matchesService;
-  });
 
   const openChat = async (user: User) => {
     setSelectedUser(user);
@@ -343,44 +365,46 @@ export default function WorkExchangePage() {
     }
   };
 
+  // Filter users
+  const filteredUsers = users.filter((user: User) => {
+    const matchesSearch = searchTerm === '' || 
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (Array.isArray(user.skills) && user.skills.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+      (Array.isArray(user.learning) && user.learning.some((l: string) => l.toLowerCase().includes(searchTerm.toLowerCase())));
+    
+    const matchesService = selectedService === 'all' || 
+      (Array.isArray(user.skills) && user.skills.includes(selectedService)) || 
+      (Array.isArray(user.learning) && user.learning.includes(selectedService));
+    
+    return matchesSearch && matchesService;
+  });
+
+  // Loading State
+    if (loading) {
+      return (
+        <div className="min-h-screen  flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-white mb-2">Loading friends...</h2>
+            <p className="text-gray-400">Please wait</p>
+          </div>
+        </div>
+      );
+    }
+
+  // Not Signed In
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center">
-        <div className="text-center bg-white p-8 rounded-2xl shadow-xl">
-          <Briefcase className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Please sign in</h2>
-          <p className="text-gray-600">You need to be logged in to access the work exchange platform</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading service providers...</h2>
-          <p className="text-gray-600">Please wait while we fetch the community</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center">
-        <div className="text-center bg-white rounded-xl shadow-lg p-8 max-w-md">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <X className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Users</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-6">
+        <div className="text-center bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700 max-w-md">
+          <FontAwesomeIcon icon={faBriefcase} className="text-6xl text-blue-500 mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-4">Please sign in</h2>
+          <p className="text-gray-400 mb-6">You need to be logged in to access the work exchange platform</p>
           <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+            onClick={() => router.push('/signin')}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
           >
-            Retry
+            Sign In
           </button>
         </div>
       </div>
@@ -392,60 +416,88 @@ export default function WorkExchangePage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
-      <div className="max-w-7xl mx-auto p-6">
+    <div className="min-h-screen bg-gradient-to-br p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Error Banner */}
+        {error && (
+          <div className="mb-6 bg-red-900/50 border border-red-700 rounded-lg p-4 text-red-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FontAwesomeIcon icon={faTimes} className="text-xl" />
+              <p className="text-sm">⚠️ {error}</p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300"
+            >
+              <FontAwesomeIcon icon={faTimes} />
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-3 mb-3">
-            <Briefcase className="w-12 h-12 text-indigo-600" />
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+          <div className="flex items-center justify-center gap-4 mb-3">
+            <FontAwesomeIcon icon={faBriefcase} className="text-5xl text-blue-500" />
+            <h1 className="text-4xl font-bold text-gray-800">
               Work Exchange Platform
             </h1>
           </div>
-          <p className="text-lg text-gray-600">Trade your services for services you need - No money required!</p>
-          <p className="text-sm text-gray-500 mt-1">💼 Work for Work • 🤝 Collaborate • 🎯 Achieve Together</p>
+          <p className="text-lg text-gray-300 mb-2">Trade your services for services you need - No money required!</p>
+          <p className="text-sm text-gray-400">💼 Work for Work • 🤝 Collaborate • 🎯 Achieve Together</p>
+          
+          {/* <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="mt-4 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700 inline-flex items-center gap-2 disabled:opacity-50"
+          >
+            <FontAwesomeIcon 
+              icon={faSync} 
+              className={`${refreshing ? 'animate-spin' : ''}`} 
+            />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button> */}
         </div>
 
-        {/* Search and Filter Section */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border-2 border-indigo-100">
+        {/* Search and Filter */}
+        <div className="bg-gray-800 rounded-xl shadow-lg p-6 mb-8 border border-gray-700">
           <div className="flex flex-col gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2 items-center gap-2">
-                <Search className="w-4 h-4" />
+              <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                <FontAwesomeIcon icon={faSearch} />
                 Search by Service or Name
               </label>
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-6 h-6" />
+                <FontAwesomeIcon icon={faSearch} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
                   placeholder="e.g., Web Development, Logo Design, Content Writing..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-12 pr-4 py-4 text-lg border-2 border-gray-300 text-black rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="w-full pl-12 pr-4 py-3 text-lg bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 />
                 {searchTerm && (
                   <button
                     onClick={() => setSearchTerm('')}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
                   >
-                    <X className="w-5 h-5" />
+                    <FontAwesomeIcon icon={faTimes} />
                   </button>
                 )}
               </div>
-              <p className="text-sm text-gray-500 mt-2">
-                {filteredUsers.length} {filteredUsers.length === 1 ? 'service provider' : 'service providers'} found
+              <p className="text-sm text-gray-400 mt-2">
+                {filteredUsers.length} {filteredUsers.length === 1 ? 'provider' : 'providers'} found
               </p>
             </div>
 
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <Filter className="text-gray-600 w-5 h-5" />
-                <label className="text-sm font-semibold text-gray-700">Filter by Service:</label>
+                <FontAwesomeIcon icon={faFilter} className="text-gray-400" />
+                <label className="text-sm font-semibold text-gray-300">Filter by Service:</label>
               </div>
               <select
                 value={selectedService}
                 onChange={(e) => setSelectedService(e.target.value)}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-700 font-medium"
+                className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium"
               >
                 {services.map(service => (
                   <option key={service} value={service}>
@@ -456,73 +508,11 @@ export default function WorkExchangePage() {
               {selectedService !== 'all' && (
                 <button
                   onClick={() => setSelectedService('all')}
-                  className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+                  className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors font-medium"
                 >
-                  Clear Filter
+                  Clear
                 </button>
               )}
-            </div>
-
-            {(searchTerm || selectedService !== 'all') && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-gray-600">Active filters:</span>
-                {searchTerm && (
-                  <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium flex items-center gap-2">
-                    Search: "{searchTerm}"
-                    <button onClick={() => setSearchTerm('')}>
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )}
-                {selectedService !== 'all' && (
-                  <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium flex items-center gap-2">
-                    Service: {selectedService}
-                    <button onClick={() => setSelectedService('all')}>
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Stats Banner */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-4 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-90">Service Providers</p>
-                <p className="text-3xl font-bold">{users.length}</p>
-              </div>
-              <Users className="w-10 h-10 opacity-80" />
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-90">Available Services</p>
-                <p className="text-3xl font-bold">{services.length - 1}</p>
-              </div>
-              <Briefcase className="w-10 h-10 opacity-80" />
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-4 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-90">Online Now</p>
-                <p className="text-3xl font-bold">{users.filter(u => u.online).length}</p>
-              </div>
-              <TrendingUp className="w-10 h-10 opacity-80" />
-            </div>
-          </div>
-          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-4 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-90">Works Completed</p>
-                <p className="text-3xl font-bold">{users.reduce((acc, u) => acc + (u.completedWorks || 0), 0)}</p>
-              </div>
-              <CheckCircle className="w-10 h-10 opacity-80" />
             </div>
           </div>
         </div>
@@ -531,88 +521,92 @@ export default function WorkExchangePage() {
         {filteredUsers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredUsers.map((user: User) => (
-              <div key={user.id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 border-2 border-gray-100 hover:border-indigo-200">
+              <div key={user.id} className="bg-gray-800 rounded-xl shadow-lg hover:shadow-2xl transition-all p-6 border border-gray-700 hover:border-gray-600">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      {user.avatar.startsWith('http') ? (
+                      {user.image ? (
                         <img 
-                          src={user.avatar} 
+                          src={user.image} 
                           alt={user.name}
-                          className="w-16 h-16 rounded-full object-cover shadow-lg ring-2 ring-indigo-100"
+                          className="w-16 h-16 rounded-full object-cover shadow-lg ring-2 ring-blue-500"
                         />
                       ) : (
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-lg ring-2 ring-indigo-100">
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg ring-2 ring-blue-500">
                           {user.avatar}
                         </div>
                       )}
                       {user.online && (
-                        <div className="absolute bottom-0 right-0 w-5 h-5 bg-green-500 rounded-full border-3 border-white shadow-md"></div>
+                        <div className="absolute bottom-0 right-0 w-5 h-5 bg-green-500 rounded-full border-3 border-gray-800"></div>
                       )}
                     </div>
                     <div>
-                      <h3 className="font-bold text-gray-900 text-lg">{user.name}</h3>
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <h3 className="font-bold text-white text-lg">{user.name}</h3>
+                      <div className="flex items-center gap-2 text-sm text-gray-400">
                         <div className="flex items-center gap-1">
-                          <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                          <span className="font-semibold">{user.rating || '4.8'}</span>
+                          <FontAwesomeIcon icon={faStar} className="text-yellow-400" />
+                          <span className="font-semibold">{user.rating?.toFixed(1) || '4.8'}</span>
                         </div>
-                        <span className="text-gray-400">•</span>
+                        <span>•</span>
                         <div className="flex items-center gap-1">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span>{user.completedWorks || 0} works</span>
+                          <FontAwesomeIcon icon={faCheckCircle} className="text-green-500" />
+                          <span>{user.completedProjects || 0} works</span>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{user.bio}</p>
+                <p className="text-sm text-gray-400 mb-4 line-clamp-2">{user.bio}</p>
 
+                {/* Services Offered */}
                 <div className="mb-3">
-                  <p className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
-                    <span className="text-indigo-600">💼</span> Services Offered:
+                  <p className="text-xs font-bold text-gray-300 mb-2 flex items-center gap-1">
+                    <FontAwesomeIcon icon={faBriefcase} className="text-blue-500" />
+                    Services Offered:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {user.offeredServices && Array.isArray(user.offeredServices) && user.offeredServices.length > 0 ? (
+                    {user.skills && Array.isArray(user.skills) && user.skills.length > 0 ? (
                       <>
-                        {user.offeredServices.slice(0, 3).map((service: string) => (
-                          <span key={service} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full font-medium border border-indigo-200">
-                            {service}
+                        {user.skills.slice(0, 3).map((skill: string) => (
+                          <span key={skill} className="px-2.5 py-1 bg-blue-900/50 text-blue-300 text-xs rounded-full font-medium border border-blue-700">
+                            {skill}
                           </span>
                         ))}
-                        {user.offeredServices.length > 3 && (
-                          <span className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
-                            +{user.offeredServices.length - 3} more
+                        {user.skills.length > 3 && (
+                          <span className="px-2.5 py-1 bg-gray-700 text-gray-300 text-xs rounded-full font-medium">
+                            +{user.skills.length - 3} more
                           </span>
                         )}
                       </>
                     ) : (
-                      <span className="text-xs text-gray-400">No services listed</span>
+                      <span className="text-xs text-gray-500">No services listed</span>
                     )}
                   </div>
                 </div>
 
+                {/* Services Needed */}
                 <div className="mb-4">
-                  <p className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
-                    <span className="text-orange-600">🔍</span> Looking for:
+                  <p className="text-xs font-bold text-gray-300 mb-2 flex items-center gap-1">
+                    <FontAwesomeIcon icon={faLightbulb} className="text-orange-500" />
+                    Looking for:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {user.neededServices && Array.isArray(user.neededServices) && user.neededServices.length > 0 ? (
+                    {user.learning && Array.isArray(user.learning) && user.learning.length > 0 ? (
                       <>
-                        {user.neededServices.slice(0, 3).map((service: string) => (
-                          <span key={service} className="px-2.5 py-1 bg-orange-50 text-orange-700 text-xs rounded-full font-medium border border-orange-200">
-                            {service}
+                        {user.learning.slice(0, 3).map((skill: string) => (
+                          <span key={skill} className="px-2.5 py-1 bg-orange-900/50 text-orange-300 text-xs rounded-full font-medium border border-orange-700">
+                            {skill}
                           </span>
                         ))}
-                        {user.neededServices.length > 3 && (
-                          <span className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
-                            +{user.neededServices.length - 3} more
+                        {user.learning.length > 3 && (
+                          <span className="px-2.5 py-1 bg-gray-700 text-gray-300 text-xs rounded-full font-medium">
+                            +{user.learning.length - 3} more
                           </span>
                         )}
                       </>
                     ) : (
-                      <span className="text-xs text-gray-400">Not specified</span>
+                      <span className="text-xs text-gray-500">Not specified</span>
                     )}
                   </div>
                 </div>
@@ -621,47 +615,47 @@ export default function WorkExchangePage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => openChat(user)}
-                    className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg"
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-md"
                   >
-                    <MessageCircle className="w-5 h-5" />
-                    Discuss Work
+                    <FontAwesomeIcon icon={faMessage} />
+                    Chat
                   </button>
                   
                   {user.friendStatus === 'accepted' ? (
                     <button
                       disabled
-                      className="px-4 py-3 bg-green-100 text-green-700 font-semibold rounded-xl flex items-center justify-center gap-2 cursor-not-allowed"
+                      className="px-4 py-3 bg-green-900/50 text-green-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-green-700"
                       title="Already collaborating"
                     >
-                      <Check className="w-5 h-5" />
+                      <FontAwesomeIcon icon={faCheck} />
                     </button>
                   ) : user.friendStatus === 'sent' ? (
                     <button
                       disabled
-                      className="px-4 py-3 bg-orange-100 text-orange-700 font-semibold rounded-xl flex items-center justify-center gap-2 cursor-not-allowed border border-orange-200"
+                      className="px-4 py-3 bg-orange-900/50 text-orange-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-orange-700"
                       title="Work request sent"
                     >
-                      <Clock className="w-5 h-5" />
+                      <FontAwesomeIcon icon={faClock} />
                     </button>
                   ) : user.friendStatus === 'pending' ? (
                     <button
                       disabled
-                      className="px-4 py-3 bg-yellow-100 text-yellow-700 font-semibold rounded-xl flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-200"
+                      className="px-4 py-3 bg-yellow-900/50 text-yellow-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-700"
                       title="This user wants to collaborate with you"
                     >
-                      <Bell className="w-5 h-5 animate-pulse" />
+                      <FontAwesomeIcon icon={faBell} className="animate-pulse" />
                     </button>
                   ) : (
                     <button
                       onClick={() => sendWorkRequest(user.id || user._id || '')}
                       disabled={sendingRequest[user.id || user._id || '']}
-                      className="px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-3 bg-gradient-to-r bg-blue-600 hover:bg-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Send collaboration request"
                     >
                       {sendingRequest[user.id || user._id || ''] ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
                       ) : (
-                        <UserPlus className="w-5 h-5" />
+                        <FontAwesomeIcon icon={faUserPlus} />
                       )}
                     </button>
                   )}
@@ -670,16 +664,16 @@ export default function WorkExchangePage() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
-            <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">No service providers found</h3>
-            <p className="text-gray-500 mb-4">Try adjusting your search or filter criteria</p>
+          <div className="text-center py-16 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+            <FontAwesomeIcon icon={faUsers} className="text-6xl text-gray-600 mb-4" />
+            <h3 className="text-xl font-semibold text-white mb-2">No service providers found</h3>
+            <p className="text-gray-400 mb-4">Try adjusting your search or filter criteria</p>
             <button
               onClick={() => {
                 setSearchTerm('');
                 setSelectedService('all');
               }}
-              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
             >
               Clear All Filters
             </button>
@@ -689,31 +683,32 @@ export default function WorkExchangePage() {
 
       {/* Chat Modal */}
       {chatOpen && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[600px] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl h-[600px] flex flex-col border border-gray-700">
+            {/* Chat Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-gray-800 to-gray-900">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  {selectedUser.avatar.startsWith('http') ? (
+                  {selectedUser.image ? (
                     <img 
-                      src={selectedUser.avatar} 
+                      src={selectedUser.image} 
                       alt={selectedUser.name}
-                      className="w-12 h-12 rounded-full object-cover ring-2 ring-indigo-200"
+                      className="w-12 h-12 rounded-full object-cover ring-2 ring-blue-500"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg ring-2 ring-indigo-200">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-lg ring-2 ring-blue-500">
                       {selectedUser.avatar}
                     </div>
                   )}
                   {selectedUser.online && (
-                    <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white"></div>
+                    <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-gray-800"></div>
                   )}
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900">{selectedUser.name}</h3>
-                  <p className="text-xs text-gray-600 flex items-center gap-1">
+                  <h3 className="font-bold text-white">{selectedUser.name}</h3>
+                  <p className="text-xs text-gray-400 flex items-center gap-1">
                     {selectedUser.online ? '🟢 Online' : '⚫ Offline'}
-                    <span className="text-gray-400">• Discuss work collaboration</span>
+                    <span className="text-gray-500">• Discuss work collaboration</span>
                   </p>
                 </div>
               </div>
@@ -725,21 +720,25 @@ export default function WorkExchangePage() {
                     pollingIntervalRef.current = null;
                   }
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 hover:bg-gray-700 rounded-full transition-colors"
               >
-                <X className="w-6 h-6 text-gray-500" />
+                <FontAwesomeIcon icon={faTimes} className="text-xl text-gray-400 hover:text-white" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-gray-50 to-white">
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900">
               {currentMessages.length === 0 ? (
-                <div className="text-center text-gray-500 mt-10">
-                  <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p className="font-semibold">No messages yet</p>
+                <div className="text-center text-gray-400 mt-10">
+                  <FontAwesomeIcon icon={faMessage} className="text-5xl mb-3 opacity-30" />
+                  <p className="font-semibold text-lg text-gray-300">No messages yet</p>
                   <p className="text-sm">Start discussing your work exchange opportunity!</p>
-                  <div className="mt-4 p-4 bg-indigo-50 rounded-lg text-left max-w-md mx-auto">
-                    <p className="text-xs text-indigo-900 font-semibold mb-2">💡 Tips for collaboration:</p>
-                    <ul className="text-xs text-indigo-700 space-y-1">
+                  <div className="mt-6 p-4 bg-gray-800 rounded-lg text-left max-w-md mx-auto border border-gray-700">
+                    <p className="text-xs text-blue-400 font-semibold mb-2 flex items-center gap-2">
+                      <FontAwesomeIcon icon={faLightbulb} />
+                      Tips for collaboration:
+                    </p>
+                    <ul className="text-xs text-gray-400 space-y-1">
                       <li>• Clearly describe what work you need</li>
                       <li>• Explain what service you can offer in return</li>
                       <li>• Discuss timelines and expectations</li>
@@ -753,9 +752,9 @@ export default function WorkExchangePage() {
                     key={msg.id}
                     className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div className={`max-w-xs ${msg.sender === 'me' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white' : 'bg-white text-gray-900 shadow-md border border-gray-200'} rounded-2xl px-4 py-3`}>
+                    <div className={`max-w-xs ${msg.sender === 'me' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white' : 'bg-gray-800 text-white shadow-lg border border-gray-700'} rounded-2xl px-4 py-3`}>
                       <p className="text-sm">{msg.text}</p>
-                      <p className={`text-xs mt-1 ${msg.sender === 'me' ? 'text-indigo-100' : 'text-gray-500'}`}>
+                      <p className={`text-xs mt-1 ${msg.sender === 'me' ? 'text-blue-100' : 'text-gray-500'}`}>
                         {msg.time}
                       </p>
                     </div>
@@ -765,7 +764,8 @@ export default function WorkExchangePage() {
               <div ref={chatEndRef} />
             </div>
 
-            <div className="p-4 border-t bg-white">
+            {/* Chat Input */}
+            <div className="p-4 border-t border-gray-700 bg-gray-800">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -774,21 +774,21 @@ export default function WorkExchangePage() {
                   onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                   placeholder="Type your message about work collaboration..."
                   disabled={sendingMessage}
-                  className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
+                  className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-600 disabled:cursor-not-allowed"
                 />
                 <button
                   onClick={sendMessage}
                   disabled={!newMessage.trim() || sendingMessage}
-                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl flex items-center gap-2 transition-colors font-semibold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg flex items-center gap-2 transition-colors font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sendingMessage ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
                   ) : (
-                    <Send className="w-5 h-5" />
+                    <FontAwesomeIcon icon={faPaperPlane} />
                   )}
                 </button>
               </div>
-              <p className="text-xs text-gray-400 mt-2 text-center flex items-center justify-center gap-1">
+              <p className="text-xs text-gray-500 mt-2 text-center flex items-center justify-center gap-1">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                 Real-time messaging • Updates every 2 seconds
               </p>

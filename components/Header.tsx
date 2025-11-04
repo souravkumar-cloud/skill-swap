@@ -59,10 +59,12 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
 
   const menuItems: MenuItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: faHome },
+    { name: 'Active Swap', href: '/activeSwap', icon: faGraduationCap },
+    { name: 'Complete Swap', href: '/completeSwap', icon: faBookOpen },
     { name: 'Skill Exchange', href: '/skill-exchange', icon: faArrowRightArrowLeft },
-    { name: 'friends', href: '/friends', icon: faGraduationCap },
-    { name: 'wallet', href: '/wallet', icon: faBookOpen },
-    { name: 'Profile', href: '/profile', icon: faUser },
+    { name: 'Connections', href: '/friends', icon: faGraduationCap },
+    
+    // { name: 'Profile', href: '/profile', icon: faUser },
   ];
 
   const isActive = (href: string) => pathname === href;
@@ -137,7 +139,7 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <FontAwesomeIcon icon={item.icon} className="text-sm" />
+                {/* <FontAwesomeIcon icon={item.icon} className="text-sm" /> */}
                 <span className="font-medium text-sm">{item.name}</span>
               </Link>
             ))}
@@ -249,28 +251,7 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
                       <p className="font-medium text-gray-900">{user?.name || 'Guest User'}</p>
                       <p className="text-sm text-gray-500 truncate">{user?.email || 'guest@example.com'}</p>
                     </div>
-                    <Link 
-                      href="/profile" 
-                      className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
-                      onClick={() => setIsProfileOpen(false)}
-                    >
-                      <FontAwesomeIcon icon={faUser} className="text-base" /> View Profile
-                    </Link>
-                    <Link 
-                      href="/settings" 
-                      className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
-                      onClick={() => setIsProfileOpen(false)}
-                    >
-                      <FontAwesomeIcon icon={faGear} className="text-base" /> Settings
-                    </Link>
-                    <Link 
-                      href="/help" 
-                      className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 transition-colors"
-                      onClick={() => setIsProfileOpen(false)}
-                    >
-                      <FontAwesomeIcon icon={faCircleQuestion} className="text-base" /> Help
-                    </Link>
-                    <div className="border-t border-gray-200 mt-1">
+                    <div className="border-t border-gray-200 ">
                       <Link 
                         href="/logout" 
                         className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 text-red-600 transition-colors"
