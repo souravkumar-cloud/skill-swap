@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import User from "@/models/userModel";
+import Match from "@/models/match";
 
 export async function GET() {
   try {
@@ -44,6 +45,14 @@ export async function GET() {
       .select('name email image skills learning rating connections lastSeen')
       .limit(20)
       .sort({ lastSeen: -1 }); // Most recently active first
+
+    // Get all existing swap proposals involving the current user
+    const existingProposals = await Match.find({
+      $or: [
+        { user: currentUser._id, status: { $in: ['pending', 'accepted'] } },
+        { matchedUser: currentUser._id, status: { $in: ['pending', 'accepted'] } }
+      ]
+    }).lean();
 
     // Calculate match scores and format response
     const matches = potentialMatches.map(user => {
@@ -89,6 +98,12 @@ export async function GET() {
       else if (diffHours < 48) responseTime = "Yesterday";
       else responseTime = `${Math.floor(diffHours / 24)} days ago`;
 
+      // Check if there's an existing swap proposal with this user
+      const existingProposal = existingProposals.find(proposal => 
+        (proposal.user.toString() === currentUser._id.toString() && proposal.matchedUser.toString() === user._id.toString()) ||
+        (proposal.matchedUser.toString() === currentUser._id.toString() && proposal.user.toString() === user._id.toString())
+      );
+
       return {
         id: user._id.toString(),
         name: user.name,
@@ -104,7 +119,9 @@ export async function GET() {
         completedProjects: user.connections || 0,
         responseTime,
         canSwap: theyCanDoForMe.length > 0 && iCanDoForThem.length > 0,
-        lastSeen: user.lastSeen
+        lastSeen: user.lastSeen,
+        swapStatus: existingProposal ? existingProposal.status : null,
+        hasSwapProposal: !!existingProposal
       };
     });
 

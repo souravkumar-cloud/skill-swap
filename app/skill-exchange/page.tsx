@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -22,8 +22,7 @@ import {
   faCheck,
   faHandshake,
   faLightbulb,
-  faExchangeAlt,
-  faSync
+  faExchangeAlt
 } from '@fortawesome/free-solid-svg-icons';
 
 interface User {
@@ -41,6 +40,7 @@ interface User {
   connections?: number;
   online?: boolean;
   friendStatus?: 'none' | 'pending' | 'accepted' | 'sent';
+  hasSwapProposal?: boolean;
 }
 
 interface Message {
@@ -70,7 +70,6 @@ export default function SkillExchangePage() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Search and Filter
@@ -86,6 +85,15 @@ export default function SkillExchangePage() {
   
   // Friend Request
   const [sendingRequest, setSendingRequest] = useState<Record<string, boolean>>({});
+  
+  // Swap Proposal
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [swapTargetUser, setSwapTargetUser] = useState<User | null>(null);
+  const [currentUserSkills, setCurrentUserSkills] = useState<string[]>([]);
+  const [selectedSkillOffered, setSelectedSkillOffered] = useState('');
+  const [selectedSkillRequested, setSelectedSkillRequested] = useState('');
+  const [proposalMessage, setProposalMessage] = useState('');
+  const [proposingSwap, setProposingSwap] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -131,8 +139,7 @@ export default function SkillExchangePage() {
   ];
 
   // Fetch users data
-  const fetchUsers = async (showRefreshing = false) => {
-    if (showRefreshing) setRefreshing(true);
+  const fetchUsers = useCallback(async () => {
     setError(null);
 
     try {
@@ -143,72 +150,76 @@ export default function SkillExchangePage() {
       }
       
       const data = await response.json();
-      
-      // Transform and enrich user data
-      const enrichedUsers = data.map((user: any) => ({
-        id: user._id || user.id,
-        _id: user._id,
-        name: user.name || 'Anonymous',
+
+      // Use server-provided data as source of truth
+      const normalized = data.map((user: any) => ({
+        id: user.id || user._id,
+        _id: user._id || user.id,
+        name: user.name,
         email: user.email,
         image: user.image,
-        avatar: user.image || user.name?.charAt(0).toUpperCase() || '?',
-        bio: user.bio || `Hi, I'm ${user.name || 'a user'}. Let's exchange skills!`,
-        skills: user.skills || [],
-        learning: user.learning || [],
-        rating: user.rating || (4.5 + Math.random() * 0.5),
-        completedProjects: user.completedProjects || Math.floor(Math.random() * 50),
-        connections: user.connections || 0,
-        online: user.online || Math.random() > 0.5,
-        friendStatus: user.friendStatus || 'none'
+        avatar: user.avatar || user.image || user.name?.charAt(0).toUpperCase() || '?',
+        bio: user.bio,
+        skills: Array.isArray(user.skills) ? user.skills : [],
+        learning: Array.isArray(user.learning) ? user.learning : [],
+        rating: typeof user.rating === 'number' ? user.rating : 0,
+        completedProjects: typeof user.completedProjects === 'number' ? user.completedProjects : 0,
+        connections: typeof user.connections === 'number' ? user.connections : 0,
+        online: Boolean(user.online),
+        friendStatus: user.friendStatus || 'none',
+        hasSwapProposal: Boolean(user.hasSwapProposal)
       }));
-      
-      setUsers(enrichedUsers);
+
+      setUsers(normalized);
     } catch (error: any) {
       console.error('Error fetching users:', error);
       setError(error.message || 'Failed to load users');
     } finally {
       setLoading(false);
-      if (showRefreshing) setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (session?.user) {
       fetchUsers();
+      // Fetch current user's skills for swap proposals
+      fetch('/api/users/skills')
+        .then(res => res.json())
+        .then(data => {
+          setCurrentUserSkills(data.skills || []);
+        })
+        .catch(err => console.error('Error fetching user skills:', err));
     } else {
       setLoading(false);
     }
+  }, [session, fetchUsers]);
+
+  // Realtime: poll users list periodically
+  useEffect(() => {
+    if (!session?.user) return;
+    const intervalId = setInterval(() => {
+      fetchUsers();
+    }, 10000); // 10s
+    return () => clearInterval(intervalId);
+  }, [session, fetchUsers]);
+
+  // Heartbeat: update lastSeen for online presence
+  useEffect(() => {
+    if (!session?.user) return;
+    const sendHeartbeat = async () => {
+      try {
+        await fetch('/api/users/ping', { method: 'POST' });
+      } catch (e) {
+        // ignore
+      }
+    };
+    sendHeartbeat();
+    const hb = setInterval(sendHeartbeat, 30000); // 30s
+    return () => clearInterval(hb);
   }, [session]);
 
-  // Chat polling
-  useEffect(() => {
-    if (chatOpen && selectedUser) {
-      const userId = selectedUser.id || selectedUser._id;
-      if (!userId) return;
-
-      fetchMessages(userId);
-
-      pollingIntervalRef.current = setInterval(() => {
-        fetchMessages(userId);
-      }, 2000);
-
-      return () => {
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
-      };
-    }
-  }, [chatOpen, selectedUser, session]);
-
-  // Auto scroll chat
-  useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, selectedUser]);
-
-  const fetchMessages = async (userId: string) => {
+  // Memoized fetchMessages function
+  const fetchMessages = useCallback(async (userId: string) => {
     try {
       const response = await fetch(`/api/messages/${userId}`);
       if (response.ok) {
@@ -232,11 +243,35 @@ export default function SkillExchangePage() {
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
-  };
+  }, [session]);
 
-  const handleRefresh = () => {
-    fetchUsers(true);
-  };
+  // Chat polling
+  useEffect(() => {
+    if (chatOpen && selectedUser) {
+      const userId = selectedUser.id || selectedUser._id;
+      if (!userId) return;
+
+      fetchMessages(userId);
+
+      pollingIntervalRef.current = setInterval(() => {
+        fetchMessages(userId);
+      }, 2000);
+
+      return () => {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      };
+    }
+  }, [chatOpen, selectedUser, fetchMessages]);
+
+  // Auto scroll chat
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, selectedUser]);
 
   const sendWorkRequest = async (userId: string) => {
     if (sendingRequest[userId]) return;
@@ -270,6 +305,59 @@ export default function SkillExchangePage() {
       alert('❌ ' + error.message);
     } finally {
       setSendingRequest(prev => ({ ...prev, [userId]: false }));
+    }
+  };
+
+  const openSwapModal = (user: User) => {
+    setSwapTargetUser(user);
+    setSelectedSkillOffered('');
+    setSelectedSkillRequested('');
+    setProposalMessage('');
+    setSwapModalOpen(true);
+  };
+
+  const handleProposeSwap = async () => {
+    if (!swapTargetUser || !selectedSkillOffered || !selectedSkillRequested) {
+      alert('Please select both skills for the swap');
+      return;
+    }
+
+    setProposingSwap(true);
+
+    try {
+      const response = await fetch('/api/matches/propose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchedUserId: swapTargetUser.id || swapTargetUser._id,
+          skillOffered: selectedSkillOffered,
+          skillRequested: selectedSkillRequested,
+          message: proposalMessage || `Hi! I'd like to swap services with you.`
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to send swap proposal');
+      }
+
+      const data = await response.json();
+      
+      if (data.message) {
+        alert('✅ Swap proposal sent successfully!');
+        setSwapModalOpen(false);
+        setSwapTargetUser(null);
+        setSelectedSkillOffered('');
+        setSelectedSkillRequested('');
+        setProposalMessage('');
+        // Refresh users list to update button status
+        await fetchUsers();
+      }
+    } catch (error: any) {
+      console.error('Error proposing swap:', error);
+      alert('❌ ' + error.message);
+    } finally {
+      setProposingSwap(false);
     }
   };
 
@@ -444,18 +532,6 @@ export default function SkillExchangePage() {
           </div>
           <p className="text-lg text-gray-300 mb-2">Trade your services for services you need - No money required!</p>
           <p className="text-sm text-gray-400">💼 Work for Work • 🤝 Collaborate • 🎯 Achieve Together</p>
-          
-          {/* <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="mt-4 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700 inline-flex items-center gap-2 disabled:opacity-50"
-          >
-            <FontAwesomeIcon 
-              icon={faSync} 
-              className={`${refreshing ? 'animate-spin' : ''}`} 
-            />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button> */}
         </div>
 
         {/* Search and Filter */}
@@ -612,51 +688,72 @@ export default function SkillExchangePage() {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => openChat(user)}
-                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-md"
-                  >
-                    <FontAwesomeIcon icon={faMessage} />
-                    Chat
-                  </button>
-                  
-                  {user.friendStatus === 'accepted' ? (
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
                     <button
-                      disabled
-                      className="px-4 py-3 bg-green-900/50 text-green-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-green-700"
-                      title="Already collaborating"
+                      onClick={() => openChat(user)}
+                      className="flex-1 py-3 bg-blue-600 hover:bg-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-md"
                     >
-                      <FontAwesomeIcon icon={faCheck} />
+                      <FontAwesomeIcon icon={faMessage} />
+                      Chat
                     </button>
-                  ) : user.friendStatus === 'sent' ? (
+                    
+                    {user.friendStatus === 'accepted' ? (
+                      <button
+                        disabled
+                        className="px-4 py-3 bg-green-900/50 text-green-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-green-700"
+                        title="Already collaborating"
+                      >
+                        <FontAwesomeIcon icon={faCheck} />
+                      </button>
+                    ) : user.friendStatus === 'sent' ? (
+                      <button
+                        disabled
+                        className="px-4 py-3 bg-orange-900/50 text-orange-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-orange-700"
+                        title="Work request sent"
+                      >
+                        <FontAwesomeIcon icon={faClock} />
+                      </button>
+                    ) : user.friendStatus === 'pending' ? (
+                      <button
+                        disabled
+                        className="px-4 py-3 bg-yellow-900/50 text-yellow-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-700"
+                        title="This user wants to collaborate with you"
+                      >
+                        <FontAwesomeIcon icon={faBell} className="animate-pulse" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => sendWorkRequest(user.id || user._id || '')}
+                        disabled={sendingRequest[user.id || user._id || '']}
+                        className="px-4 py-3 bg-gradient-to-r bg-blue-600 hover:bg-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Send collaboration request"
+                      >
+                        {sendingRequest[user.id || user._id || ''] ? (
+                          <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                        ) : (
+                          <FontAwesomeIcon icon={faUserPlus} />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  
+                  {user.hasSwapProposal ? (
                     <button
                       disabled
-                      className="px-4 py-3 bg-orange-900/50 text-orange-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-orange-700"
-                      title="Work request sent"
+                      className="w-full py-3 bg-yellow-900/50 text-yellow-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-700 shadow-md"
+                      title="Swap proposal already pending"
                     >
                       <FontAwesomeIcon icon={faClock} />
-                    </button>
-                  ) : user.friendStatus === 'pending' ? (
-                    <button
-                      disabled
-                      className="px-4 py-3 bg-yellow-900/50 text-yellow-400 font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-700"
-                      title="This user wants to collaborate with you"
-                    >
-                      <FontAwesomeIcon icon={faBell} className="animate-pulse" />
+                      Pending Swap
                     </button>
                   ) : (
                     <button
-                      onClick={() => sendWorkRequest(user.id || user._id || '')}
-                      disabled={sendingRequest[user.id || user._id || '']}
-                      className="px-4 py-3 bg-gradient-to-r bg-blue-600 hover:bg-blue-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Send collaboration request"
+                      onClick={() => openSwapModal(user)}
+                      className="w-full py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-md"
                     >
-                      {sendingRequest[user.id || user._id || ''] ? (
-                        <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
-                      ) : (
-                        <FontAwesomeIcon icon={faUserPlus} />
-                      )}
+                      <FontAwesomeIcon icon={faHandshake} />
+                      Propose Swap
                     </button>
                   )}
                 </div>
@@ -792,6 +889,111 @@ export default function SkillExchangePage() {
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                 Real-time messaging • Updates every 2 seconds
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Swap Proposal Modal */}
+      {swapModalOpen && swapTargetUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700">
+            <div className="flex items-center justify-between p-6 border-b border-gray-700">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                <FontAwesomeIcon icon={faHandshake} className="text-green-500" />
+                Propose Swap
+              </h2>
+              <button
+                onClick={() => setSwapModalOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <FontAwesomeIcon icon={faTimes} className="text-xl" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-700/50 rounded-lg p-4">
+                <p className="text-sm text-gray-400 mb-2">Swapping with:</p>
+                <p className="text-white font-semibold">{swapTargetUser.name}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  I will offer (my skill):
+                </label>
+                <select
+                  value={selectedSkillOffered}
+                  onChange={(e) => setSelectedSkillOffered(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="">Select a skill you can offer</option>
+                  {currentUserSkills.map((skill) => (
+                    <option key={skill} value={skill}>{skill}</option>
+                  ))}
+                </select>
+                {currentUserSkills.length === 0 && (
+                  <p className="text-xs text-yellow-400 mt-1">Add skills in your profile first</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  I need (their skill):
+                </label>
+                <select
+                  value={selectedSkillRequested}
+                  onChange={(e) => setSelectedSkillRequested(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="">Select a skill they can offer</option>
+                  {swapTargetUser.skills && swapTargetUser.skills.length > 0 ? (
+                    swapTargetUser.skills.map((skill) => (
+                      <option key={skill} value={skill}>{skill}</option>
+                    ))
+                  ) : (
+                    <option value="" disabled>This user hasn't listed any skills</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  Message (optional):
+                </label>
+                <textarea
+                  value={proposalMessage}
+                  onChange={(e) => setProposalMessage(e.target.value)}
+                  placeholder="Add a personal message..."
+                  rows={3}
+                  className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setSwapModalOpen(false)}
+                  className="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleProposeSwap}
+                  disabled={!selectedSkillOffered || !selectedSkillRequested || proposingSwap}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {proposingSwap ? (
+                    <>
+                      <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faHandshake} />
+                      Send Proposal
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

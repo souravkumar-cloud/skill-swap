@@ -79,7 +79,56 @@ export async function GET() {
       (lp: any) => lp.progress > 0 && lp.progress < 100
     ).length || 0;
 
-    // Update user stats
+    // Calculate average rating from completed matches
+    // Get all completed matches where user participated
+    const completedMatches = await Match.find({
+      $or: [
+        { user: user._id, status: 'completed' },
+        { matchedUser: user._id, status: 'completed' }
+      ]
+    }).lean();
+
+    let totalRating = 0;
+    let ratingCount = 0;
+    let monthlyRatingSum = 0;
+    let monthlyRatingCount = 0;
+
+    for (const match of completedMatches) {
+      let rating: number | null = null;
+      
+      // If user is the proposer, get rating from userRating (given by matchedUser)
+      if (match.user.toString() === user._id.toString()) {
+        if (match.userRating && typeof match.userRating.rating === 'number') {
+          rating = match.userRating.rating;
+        }
+      } 
+      // If user is the matched user, get rating from matchedUserRating (given by user)
+      else if (match.matchedUser.toString() === user._id.toString()) {
+        if (match.matchedUserRating && typeof match.matchedUserRating.rating === 'number') {
+          rating = match.matchedUserRating.rating;
+        }
+      }
+
+      if (rating !== null) {
+        totalRating += rating;
+        ratingCount += 1;
+
+        // Check if rating was given this month
+        const ratingDate = match.completedAt || match.updatedAt;
+        if (ratingDate && new Date(ratingDate) >= oneMonthAgo) {
+          monthlyRatingSum += rating;
+          monthlyRatingCount += 1;
+        }
+      }
+    }
+
+    // Calculate average rating
+    const averageRating = ratingCount > 0 ? totalRating / ratingCount : 0;
+    const monthlyAverageRating = monthlyRatingCount > 0 ? monthlyRatingSum / monthlyRatingCount : 0;
+    // DailyRating trend: average rating this month (if any ratings exist)
+    const dailyRating = monthlyRatingCount > 0 ? monthlyAverageRating : 0;
+
+    // Update user stats including rating
     await User.findByIdAndUpdate(user._id, {
       'stats.skillsShared': skillsShared,
       'stats.activeConnections': activeConnections,
@@ -88,7 +137,8 @@ export async function GET() {
       'stats.weeklySkillsShared': Math.min(weeklyConnections, skillsShared),
       'stats.newConnectionsCount': weeklyConnections,
       'stats.learningInProgress': learningInProgress,
-      'stats.monthlyAchievements': monthlyAchievements
+      'stats.monthlyAchievements': monthlyAchievements,
+      rating: averageRating
     });
 
     const stats = {
@@ -96,11 +146,13 @@ export async function GET() {
       activeConnections,
       skillsLearning,
       achievements: totalAchievements,
+      Rating: averageRating,
       trends: {
         weeklySkillsShared: Math.min(weeklyConnections, skillsShared),
         newConnections: weeklyConnections,
         learningInProgress,
-        monthlyAchievements
+        monthlyAchievements,
+        DailyRating: dailyRating
       }
     };
 

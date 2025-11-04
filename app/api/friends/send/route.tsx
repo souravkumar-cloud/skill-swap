@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import FriendRequest from '@/models/FriendRequest';
 import User from '@/models/userModel';
+import Notification from '@/models/notifications';
 
 export async function POST(req) {
   try {
@@ -74,6 +75,20 @@ export async function POST(req) {
         existingRequest.createdAt = new Date();
         await existingRequest.save();
 
+        // Create notification for receiver
+        try {
+          await Notification.create({
+            userId: receiver._id,
+            type: 'friend_request',
+            senderId: currentUser._id,
+            message: `${currentUser.name} sent you a friend request`,
+            data: { requestId: existingRequest._id.toString() },
+            read: false
+          });
+        } catch (e) {
+          console.error('Failed to create notification for friend request', e);
+        }
+
         return NextResponse.json({
           success: true,
           message: 'Friend request sent successfully',
@@ -87,6 +102,20 @@ export async function POST(req) {
       receiverId: receiverId,
       status: 'pending'
     });
+
+    // Create notification for receiver
+    try {
+      await Notification.create({
+        userId: receiver._id,
+        type: 'friend_request',
+        senderId: currentUser._id,
+        message: `${currentUser.name} sent you a friend request`,
+        data: { requestId: friendRequest._id.toString() },
+        read: false
+      });
+    } catch (e) {
+      console.error('Failed to create notification for friend request', e);
+    }
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessageCircle, X, Send, Loader2, ArrowLeft, Users, Phone, Video, MoreVertical } from 'lucide-react';
@@ -71,8 +71,8 @@ export default function ChatRoomPage() {
     fetchFriendDetails();
   }, [friendId]);
 
-  // Fetch messages
-  const fetchMessages = async () => {
+  // Fetch messages - memoized to prevent infinite loops
+  const fetchMessages = useCallback(async () => {
     if (!friendId) return;
 
     try {
@@ -100,7 +100,7 @@ export default function ChatRoomPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [friendId, session]);
 
   // Initial fetch and polling
   useEffect(() => {
@@ -122,7 +122,7 @@ export default function ChatRoomPage() {
         pollingIntervalRef.current = null;
       }
     };
-  }, [session, friendId]);
+  }, [session, friendId, fetchMessages]);
 
   // Auto-scroll to bottom
   useEffect(() => {

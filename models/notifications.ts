@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
-  type: 'swap_proposal' | 'friend_request' | 'swap_accepted' | 'swap_rejected';
+  type: 'swap_proposal' | 'friend_request' | 'swap_accepted' | 'swap_rejected' | 'message';
   senderId: mongoose.Types.ObjectId;
   message: string;
   data: {
@@ -10,6 +10,8 @@ export interface INotification extends Document {
     skillOffered?: string;
     skillRequested?: string;
     proposalMessage?: string;
+    messageId?: string;
+    requestId?: string;
   };
   read: boolean;
   createdAt: Date;
@@ -24,7 +26,7 @@ const NotificationSchema = new Schema<INotification>({
   },
   type: {
     type: String,
-    enum: ['swap_proposal', 'friend_request', 'swap_accepted', 'swap_rejected'],
+    enum: ['swap_proposal', 'friend_request', 'swap_accepted', 'swap_rejected', 'message'],
     required: true
   },
   senderId: {
@@ -40,7 +42,9 @@ const NotificationSchema = new Schema<INotification>({
     matchId: String,
     skillOffered: String,
     skillRequested: String,
-    proposalMessage: String
+    proposalMessage: String,
+    messageId: String,
+    requestId: String
   },
   read: {
     type: Boolean,

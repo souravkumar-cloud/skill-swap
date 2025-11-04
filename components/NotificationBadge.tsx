@@ -44,7 +44,16 @@ export default function NotificationBadge() {
     // Poll every 10 seconds for real-time updates
     const interval = setInterval(fetchUnreadCount, 10000);
 
-    return () => clearInterval(interval);
+    // Listen for custom event when notifications are marked as read
+    const handleNotificationUpdate = () => {
+      fetchUnreadCount();
+    };
+    window.addEventListener('notifications-updated', handleNotificationUpdate);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notifications-updated', handleNotificationUpdate);
+    };
   }, [session]);
 
   if (!session?.user) return null;

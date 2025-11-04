@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
@@ -41,7 +41,7 @@ export default function ChatPage({ userId }: ChatPageProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       const res = await fetch(`/api/messages/${userId}`);
       const data = await res.json();
@@ -56,13 +56,16 @@ export default function ChatPage({ userId }: ChatPageProps) {
           setTimeout(scrollToBottom, 100);
         }
         
-        // Get other user info from first message
-        if (data.messages.length > 0 && !otherUser) {
-          const firstMsg = data.messages[0];
-          const other = firstMsg.senderId.email === session?.user?.email 
-            ? firstMsg.receiverId 
-            : firstMsg.senderId;
-          setOtherUser(other);
+        // Get other user info from first message (only set once)
+        if (data.messages.length > 0) {
+          setOtherUser(prev => {
+            if (prev) return prev; // Don't update if already set
+            const firstMsg = data.messages[0];
+            const other = firstMsg.senderId.email === session?.user?.email 
+              ? firstMsg.receiverId 
+              : firstMsg.senderId;
+            return other;
+          });
         }
       }
     } catch (error) {
@@ -70,7 +73,7 @@ export default function ChatPage({ userId }: ChatPageProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, session]);
 
   useEffect(() => {
     if (!userId || !session) return;
@@ -88,7 +91,7 @@ export default function ChatPage({ userId }: ChatPageProps) {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [userId, session]);
+  }, [userId, session, fetchMessages]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();

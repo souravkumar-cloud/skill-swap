@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import FriendRequest from '@/models/FriendRequest';
 import User from '@/models/userModel';
 
-export async function POST(req) {
+export async function POST(req: NextRequest) {
   try {
     const session = await auth();
 
@@ -15,11 +15,11 @@ export async function POST(req) {
       );
     }
 
-    const { requestId, action } = await req.json();
+    const { requestId, notificationId, senderId, action } = await req.json();
 
-    if (!requestId || !action) {
+    if (!action) {
       return NextResponse.json(
-        { error: 'Request ID and action are required' },
+        { error: 'Action is required' },
         { status: 400 }
       );
     }
@@ -41,7 +41,27 @@ export async function POST(req) {
       );
     }
 
-    const friendRequest = await FriendRequest.findById(requestId);
+    // If requestId is not provided, try to find it by senderId from notification
+    let finalRequestId = requestId;
+    if (!finalRequestId && senderId) {
+      const foundRequest = await FriendRequest.findOne({
+        senderId: senderId,
+        receiverId: currentUser._id,
+        status: 'pending'
+      });
+      if (foundRequest) {
+        finalRequestId = foundRequest._id.toString();
+      }
+    }
+
+    if (!finalRequestId) {
+      return NextResponse.json(
+        { error: 'Request ID is required. Please refresh the page and try again.' },
+        { status: 400 }
+      );
+    }
+
+    const friendRequest = await FriendRequest.findById(finalRequestId);
     if (!friendRequest) {
       return NextResponse.json(
         { error: 'Friend request not found' },
@@ -84,7 +104,7 @@ export async function POST(req) {
       });
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error responding to friend request:', error);
     return NextResponse.json(
       { error: 'Failed to respond to friend request', details: error.message },

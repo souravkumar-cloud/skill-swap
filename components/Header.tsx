@@ -17,6 +17,7 @@ import {
   faUsers,
   faBookOpen,
   faTimes,
+  faMessage,
 } from '@fortawesome/free-solid-svg-icons';
 
 interface UserType {
@@ -35,16 +36,27 @@ interface MenuItem {
   icon: any;
 }
 
-interface FriendRequest {
+interface Notification {
   _id: string;
-  senderId: {
+  type: 'message' | 'friend_request' | 'swap_proposal' | 'swap_accepted' | 'swap_rejected' | 'swap_completed';
+  message: string;
+  read: boolean;
+  createdAt: string;
+  senderId?: {
     _id: string;
     name: string;
     email: string;
-    avatar: string;
+    image?: string;
+    avatar?: string;
   };
-  status: 'pending' | 'accepted' | 'rejected';
-  createdAt: string;
+  data?: {
+    messageContent?: string;
+    skillOffered?: string;
+    skillRequested?: string;
+    requestId?: string;
+    messageId?: string;
+    matchId?: string;
+  };
 }
 
 const Header: React.FC<NavbarProps> = ({ user }) => {
@@ -52,7 +64,7 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
   const [isBellOpen, setIsBellOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
-  const [recentRequests, setRecentRequests] = useState<FriendRequest[]>([]);
+  const [recentNotifications, setRecentNotifications] = useState<Notification[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -62,23 +74,26 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
     { name: 'Active Swap', href: '/activeSwap', icon: faGraduationCap },
     { name: 'Complete Swap', href: '/completeSwap', icon: faBookOpen },
     { name: 'Skill Exchange', href: '/skill-exchange', icon: faArrowRightArrowLeft },
-    { name: 'Connections', href: '/friends', icon: faGraduationCap },
-    
-    // { name: 'Profile', href: '/profile', icon: faUser },
+    { name: 'Connections', href: '/friends', icon: faUsers },
   ];
 
   const isActive = (href: string) => pathname === href;
 
-  // Fetch notification count
+  // Fetch notification count and recent notifications
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const response = await fetch('/api/friends/requests');
-        if (response.ok) {
-          const data = await response.json();
-          const pendingRequests = data.requests?.filter((req: FriendRequest) => req.status === 'pending') || [];
-          setNotificationCount(pendingRequests.length);
-          setRecentRequests(pendingRequests.slice(0, 3)); // Show only 3 most recent
+        // Fetch all notifications
+        const notifRes = await fetch('/api/notifications');
+        if (notifRes.ok) {
+          const notifData = await notifRes.json();
+          const unreadNotifications = notifData.notifications?.filter((n: Notification) => !n.read) || [];
+          setNotificationCount(notifData.unreadCount || 0);
+          // Show only 5 most recent unread notifications
+          setRecentNotifications(unreadNotifications.slice(0, 5));
+        } else {
+          setNotificationCount(0);
+          setRecentNotifications([]);
         }
       } catch (error) {
         console.error('Error fetching notifications:', error);
@@ -87,9 +102,19 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
 
     if (user) {
       fetchNotifications();
-      // Refresh every 30 seconds (optional)
+      // Refresh every 30 seconds
       const interval = setInterval(fetchNotifications, 30000);
-      return () => clearInterval(interval);
+
+      // Listen for custom event when notifications are marked as read
+      const handleNotificationUpdate = () => {
+        fetchNotifications();
+      };
+      window.addEventListener('notifications-updated', handleNotificationUpdate);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('notifications-updated', handleNotificationUpdate);
+      };
     }
   }, [user]);
 
@@ -180,33 +205,73 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
                           <p className="text-sm">No new notifications</p>
                         </div>
                       ) : (
-                        recentRequests.map((request) => (
-                          <Link
-                            key={request._id}
-                            href="/notifications"
-                            onClick={() => setIsBellOpen(false)}
-                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b block"
-                          >
-                            <div className="flex items-center gap-3">
-                              {request.senderId.avatar?.startsWith('http') ? (
-                                <img 
-                                  src={request.senderId.avatar} 
-                                  alt={request.senderId.name}
-                                  className="w-10 h-10 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-                                  {request.senderId.name.charAt(0).toUpperCase()}
+                        recentNotifications.map((notif) => {
+                          const getNotificationLink = () => {
+                            if (notif.type === 'message') return `/chat`;
+                            if (notif.type === 'friend_request') return `/notifications`;
+                            if (notif.type === 'swap_proposal' || notif.type === 'swap_accepted' || notif.type === 'swap_rejected') return `/activeSwap`;
+                            return `/notifications`;
+                          };
+
+                          const getNotificationTitle = () => {
+                            switch (notif.type) {
+                              case 'message':
+                                return 'New Message';
+                              case 'friend_request':
+                                return 'Friend Request';
+                              case 'swap_proposal':
+                                return 'Swap Proposal';
+                              case 'swap_accepted':
+                                return 'Swap Accepted';
+                              case 'swap_rejected':
+                                return 'Swap Rejected';
+                              case 'swap_completed':
+                                return 'Swap Completed';
+                              default:
+                                return 'Notification';
+                            }
+                          };
+
+                          const getNotificationText = () => {
+                            if (notif.type === 'message' && notif.data?.messageContent) {
+                              return notif.data.messageContent.length > 50 
+                                ? notif.data.messageContent.substring(0, 50) + '...'
+                                : notif.data.messageContent;
+                            }
+                            return notif.message || 'New notification';
+                          };
+
+                          const senderName = notif.senderId?.name || 'Someone';
+                          const senderAvatar = notif.senderId?.avatar || notif.senderId?.image;
+
+                          return (
+                            <Link
+                              key={notif._id}
+                              href={getNotificationLink()}
+                              onClick={() => setIsBellOpen(false)}
+                              className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b block"
+                            >
+                              <div className="flex items-center gap-3">
+                                {senderAvatar?.startsWith('http') ? (
+                                  <img 
+                                    src={senderAvatar} 
+                                    alt={senderName}
+                                    className="w-10 h-10 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+                                    {senderName.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900">{getNotificationTitle()}</p>
+                                  <p className="text-xs text-gray-500 mt-1 truncate">{getNotificationText()}</p>
+                                  <p className="text-xs text-gray-400 mt-1">{getTimeAgo(notif.createdAt)}</p>
                                 </div>
-                              )}
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">Friend Request</p>
-                                <p className="text-xs text-gray-500 mt-1">{request.senderId.name} wants to connect</p>
-                                <p className="text-xs text-gray-400 mt-1">{getTimeAgo(request.createdAt)}</p>
                               </div>
-                            </div>
-                          </Link>
-                        ))
+                            </Link>
+                          );
+                        })
                       )}
                     </div>
                     <div className="px-4 py-2 border-t border-gray-200 text-center">
@@ -245,13 +310,22 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
               </button>
 
               {isProfileOpen && (
-                <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+                <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
                   <div className="py-1 text-gray-700">
                     <div className="px-4 py-3 border-b border-gray-200">
                       <p className="font-medium text-gray-900">{user?.name || 'Guest User'}</p>
                       <p className="text-sm text-gray-500 truncate">{user?.email || 'guest@example.com'}</p>
                     </div>
-                    <div className="border-t border-gray-200 ">
+                    <div className="py-1">
+                      <Link 
+                        href="/profile" 
+                        className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 text-gray-700 transition-colors"
+                        onClick={() => setIsProfileOpen(false)}
+                      >
+                        <FontAwesomeIcon icon={faUser} className="text-base" /> Profile
+                      </Link>
+                    </div>
+                    <div className="border-t border-gray-200">
                       <Link 
                         href="/logout" 
                         className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 text-red-600 transition-colors"
@@ -333,6 +407,13 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
             {/* Profile Actions */}
             <div className="border-t border-gray-200 pt-2">
               <Link 
+                href="/profile" 
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <FontAwesomeIcon icon={faUser} className="text-base" /> Profile
+              </Link>
+              <Link 
                 href="/notifications" 
                 className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -353,6 +434,13 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <FontAwesomeIcon icon={faGear} className="text-base" /> Settings
+              </Link>
+              <Link 
+                href="/help" 
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <FontAwesomeIcon icon={faCircleQuestion} className="text-base" /> Help & Support
               </Link>
               <Link 
                 href="/logout" 

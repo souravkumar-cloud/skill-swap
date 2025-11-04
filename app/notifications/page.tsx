@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Bell, Check, Ban, Loader2, Users, X, UserPlus, Clock, RefreshCw, Handshake, AlertCircle, CheckCircle, XCircle, ArrowRightLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Bell, Check, Ban, Loader2, Users, X, UserPlus, Clock, RefreshCw, Handshake, AlertCircle, CheckCircle, XCircle, ArrowRightLeft, MessageSquare } from 'lucide-react';
 
 interface FriendRequest {
   _id: string;
@@ -19,7 +20,7 @@ interface FriendRequest {
 
 interface SwapNotification {
   _id: string;
-  type: 'swap_proposal' | 'swap_accepted' | 'swap_rejected';
+  type: 'swap_proposal' | 'swap_accepted' | 'swap_rejected' | 'message' | 'friend_request';
   senderId: {
     _id: string;
     name: string;
@@ -33,6 +34,9 @@ interface SwapNotification {
     skillOffered?: string;
     skillRequested?: string;
     proposalMessage?: string;
+    messageId?: string;
+    messageContent?: string;
+    requestId?: string;
   };
   read: boolean;
   createdAt: string;
@@ -40,76 +44,115 @@ interface SwapNotification {
 
 export default function NotificationsPage() {
   const { data: session } = useSession();
-  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const router = useRouter();
   const [swapNotifications, setSwapNotifications] = useState<SwapNotification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'swaps' | 'friends'>('all');
+  const [activeTab, setActiveTab] = useState<'swaps'>('swaps');
 
-  const fetchAllNotifications = async (isManualRefresh = false) => {
+  const fetchAllNotifications = useCallback(async (isManualRefresh = false, isBackgroundPoll = false) => {
     if (!session) {
       setLoading(false);
       return;
     }
 
     try {
+      // Only show loading state on initial load or manual refresh
       if (isManualRefresh) {
         setRefreshing(true);
-      } else {
+      } else if (!isBackgroundPoll) {
         setLoading(true);
       }
-      
-      // Fetch friend requests
-      const friendsRes = await fetch('/api/friends/requests');
-      if (friendsRes.ok) {
-        const friendsData = await friendsRes.json();
-        setFriendRequests(friendsData.requests || []);
-      }
 
-      // Fetch swap notifications
+      // Fetch notifications (includes messages, swaps, etc.)
       const notifRes = await fetch('/api/notifications');
       if (notifRes.ok) {
         const notifData = await notifRes.json();
         setSwapNotifications(notifData.notifications || []);
-        setUnreadCount(notifData.unreadCount || 0);
       }
       
       setError(null);
     } catch (error: any) {
       console.error('Error fetching notifications:', error);
-      setError(error.message);
+      // Only show error on initial load or manual refresh, not during background polling
+      if (!isBackgroundPoll) {
+        setError(error.message);
+      }
     } finally {
-      setLoading(false);
+      if (!isBackgroundPoll) {
+        setLoading(false);
+      }
       setRefreshing(false);
     }
-  };
-
-  useEffect(() => {
-    fetchAllNotifications();
-
-    // Poll for new notifications every 10 seconds
-    const interval = setInterval(() => {
-      fetchAllNotifications(false);
-    }, 10000);
-
-    return () => clearInterval(interval);
   }, [session]);
 
+  useEffect(() => {
+    // Initial load
+    fetchAllNotifications(false, false);
+
+    // Background polling for real-time updates (no loading state, no page reload)
+    // Only poll when page is visible to avoid unnecessary requests
+    let interval: NodeJS.Timeout | null = null;
+    
+    const startPolling = () => {
+      if (interval) clearInterval(interval);
+      interval = setInterval(() => {
+        fetchAllNotifications(false, true);
+      }, 5000); // Poll every 5 seconds for faster updates
+    };
+
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page is hidden, stop polling
+        stopPolling();
+      } else {
+        // Page is visible, fetch immediately and start polling
+        fetchAllNotifications(false, true);
+        startPolling();
+      }
+    };
+
+    // Start polling if page is visible
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [session, fetchAllNotifications]);
+
   const handleRefresh = () => {
-    fetchAllNotifications(true);
+    fetchAllNotifications(true, false);
   };
 
-  const handleFriendRequest = async (requestId: string, action: 'accept' | 'reject') => {
-    setProcessingRequest(requestId);
+  const handleFriendRequest = async (notificationId: string, requestId: string, senderId: string, action: 'accept' | 'reject') => {
+    setProcessingRequest(notificationId);
 
     try {
+      // Send requestId if available, otherwise send senderId as fallback
       const response = await fetch('/api/friends/respond', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId, action })
+        body: JSON.stringify({ 
+          requestId: requestId || undefined,
+          senderId: senderId || undefined,
+          notificationId: notificationId,
+          action 
+        })
       });
 
       if (!response.ok) {
@@ -120,11 +163,24 @@ export default function NotificationsPage() {
       const data = await response.json();
       
       if (data.success) {
-        setFriendRequests(prev => prev.filter(req => req._id !== requestId));
+        // Mark notification as read
+        await fetch('/api/notifications/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notificationId })
+        });
+
+        // Remove the notification from the list
+        setSwapNotifications(prev => prev.filter(notif => notif._id !== notificationId));
         alert(action === 'accept' ? '✅ Friend request accepted!' : '❌ Friend request rejected');
+        
+        // Dispatch custom event to update notification badge in header
+        window.dispatchEvent(new CustomEvent('notifications-updated'));
       }
     } catch (error: any) {
       console.error(`Error ${action}ing friend request:`, error);
+      console.error('Request ID:', requestId);
+      console.error('Notification ID:', notificationId);
       alert(`Failed to ${action} friend request: ` + error.message);
     } finally {
       setProcessingRequest(null);
@@ -150,9 +206,11 @@ export default function NotificationsPage() {
       
       if (data.success) {
         setSwapNotifications(prev => prev.filter(notif => notif._id !== notificationId));
-        setUnreadCount(prev => Math.max(0, prev - 1));
         alert(action === 'accept' ? '🎉 Swap proposal accepted!' : '❌ Swap proposal declined');
-        fetchAllNotifications(true);
+        fetchAllNotifications(true, false);
+        
+        // Dispatch custom event to update notification badge in header
+        window.dispatchEvent(new CustomEvent('notifications-updated'));
       }
     } catch (error: any) {
       console.error(`Error ${action}ing swap proposal:`, error);
@@ -175,7 +233,9 @@ export default function NotificationsPage() {
           notif._id === notificationId ? { ...notif, read: true } : notif
         )
       );
-      setUnreadCount(prev => Math.max(0, prev - 1));
+
+      // Dispatch custom event to update notification badge in header
+      window.dispatchEvent(new CustomEvent('notifications-updated'));
     } catch (error) {
       console.error('Error marking as read:', error);
     }
@@ -192,9 +252,42 @@ export default function NotificationsPage() {
       setSwapNotifications(prev =>
         prev.map(notif => ({ ...notif, read: true }))
       );
-      setUnreadCount(0);
+
+      // Dispatch custom event to update notification badge in header
+      window.dispatchEvent(new CustomEvent('notifications-updated'));
     } catch (error) {
       console.error('Error marking all as read:', error);
+    }
+  };
+
+  const markAsDone = async (notificationId: string) => {
+    try {
+      // First mark as read, then delete
+      await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId })
+      });
+
+      // Delete the notification
+      const response = await fetch('/api/notifications/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to dismiss notification');
+      }
+
+      // Remove from local state
+      setSwapNotifications(prev => prev.filter(notif => notif._id !== notificationId));
+
+      // Dispatch custom event to update notification badge in header
+      window.dispatchEvent(new CustomEvent('notifications-updated'));
+    } catch (error) {
+      console.error('Error marking as done:', error);
+      alert('Failed to dismiss notification. Please try again.');
     }
   };
 
@@ -210,20 +303,14 @@ export default function NotificationsPage() {
     return date.toLocaleDateString();
   };
 
-  const pendingFriendRequests = friendRequests.filter(req => req.status === 'pending');
+  const messageNotifications = swapNotifications.filter(notif => notif.type === 'message');
+  const friendRequestNotifications = swapNotifications.filter(notif => notif.type === 'friend_request' && !notif.read);
   const pendingSwapProposals = swapNotifications.filter(notif => notif.type === 'swap_proposal' && !notif.read);
-  const otherSwapNotifications = swapNotifications.filter(notif => notif.type !== 'swap_proposal');
-  
-  const totalPending = pendingFriendRequests.length + pendingSwapProposals.length;
+  const otherSwapNotifications = swapNotifications.filter(notif => notif.type !== 'swap_proposal' && notif.type !== 'message' && notif.type !== 'friend_request');
 
   const filteredNotifications = () => {
-    if (activeTab === 'swaps') {
-      return [...pendingSwapProposals, ...otherSwapNotifications];
-    }
-    if (activeTab === 'friends') {
-      return pendingFriendRequests;
-    }
-    return [...pendingSwapProposals, ...pendingFriendRequests, ...otherSwapNotifications];
+    // Show messages, friend requests, and swaps in the swap tab
+    return [...messageNotifications, ...friendRequestNotifications, ...pendingSwapProposals, ...otherSwapNotifications];
   };
 
   if (!session) {
@@ -240,7 +327,7 @@ export default function NotificationsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+      <div className="min-h-screen  flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-white mb-2">Loading notifications...</h2>
@@ -271,7 +358,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen ">
       <div className="max-w-5xl mx-auto p-6">
         {/* Header */}
         <div className="mb-8">
@@ -279,104 +366,22 @@ export default function NotificationsPage() {
             <div className="flex items-center gap-3">
               <div className="relative">
                 <Bell className="w-10 h-10 text-blue-500" />
-                {totalPending > 0 && (
-                  <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                    {totalPending}
-                  </span>
-                )}
               </div>
-              <h1 className="text-4xl font-bold text-white">Notifications</h1>
+              <h1 className="text-4xl font-bold text-blue-500">Notifications</h1>
             </div>
             
             <div className="flex gap-3">
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllAsRead}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors border border-gray-600"
-                >
-                  Mark All Read
-                </button>
-              )}
               <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={markAllAsRead}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors border border-gray-600"
               >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                {refreshing ? 'Refreshing...' : 'Refresh'}
+                Mark All Read
               </button>
             </div>
           </div>
           <p className="text-lg text-gray-400">
-            {totalPending > 0
-              ? `You have ${totalPending} pending notification${totalPending === 1 ? '' : 's'}`
-              : 'All caught up! No new notifications'}
+            Messages and swap notifications
           </p>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 bg-gray-800 p-1 rounded-lg border border-gray-700">
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'all'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
-            }`}
-          >
-            All ({totalPending + otherSwapNotifications.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('swaps')}
-            className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'swaps'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
-            }`}
-          >
-            Swaps ({pendingSwapProposals.length + otherSwapNotifications.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('friends')}
-            className={`flex-1 px-4 py-2 rounded-md font-medium transition-colors ${
-              activeTab === 'friends'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
-            }`}
-          >
-            Friends ({pendingFriendRequests.length})
-          </button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-gray-800 rounded-lg p-4 shadow-md border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-400">Pending Swaps</p>
-                <p className="text-2xl font-bold text-orange-500">{pendingSwapProposals.length}</p>
-              </div>
-              <Handshake className="w-8 h-8 text-orange-500 opacity-80" />
-            </div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4 shadow-md border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-400">Friend Requests</p>
-                <p className="text-2xl font-bold text-blue-500">{pendingFriendRequests.length}</p>
-              </div>
-              <UserPlus className="w-8 h-8 text-blue-500 opacity-80" />
-            </div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4 shadow-md border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-400">Unread</p>
-                <p className="text-2xl font-bold text-green-500">{unreadCount}</p>
-              </div>
-              <AlertCircle className="w-8 h-8 text-green-500 opacity-80" />
-            </div>
-          </div>
         </div>
 
         {/* Notifications List */}
@@ -387,11 +392,7 @@ export default function NotificationsPage() {
                 <Bell className="w-10 h-10 text-gray-500" />
               </div>
               <h3 className="text-xl font-semibold text-gray-300 mb-2">No notifications</h3>
-              <p className="text-gray-500 mb-6">
-                {activeTab === 'swaps' && 'No swap proposals yet'}
-                {activeTab === 'friends' && 'No friend requests yet'}
-                {activeTab === 'all' && 'All caught up!'}
-              </p>
+              <p className="text-gray-500 mb-6">All caught up! No new messages or notifications.</p>
               <a
                 href="/work-exchange"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
@@ -402,8 +403,197 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <div className="divide-y divide-gray-700">
+              {/* Friend Request Notifications */}
+              {friendRequestNotifications.map((notif) => (
+                <div
+                  key={notif._id}
+                  className={`p-6 transition-colors ${
+                    !notif.read ? 'bg-blue-900/20 hover:bg-blue-900/30' : 'hover:bg-gray-750'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="relative flex-shrink-0">
+                      {notif.senderId.image ? (
+                        <img
+                          src={notif.senderId.image}
+                          alt={notif.senderId.name}
+                          className="w-16 h-16 rounded-full object-cover shadow-md"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
+                          {notif.senderId.avatar || notif.senderId.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-gray-800 flex items-center justify-center">
+                        <UserPlus className="w-3 h-3 text-white" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="font-bold text-white text-lg">
+                          {notif.senderId.name}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400 whitespace-nowrap">
+                            {getTimeAgo(notif.createdAt)}
+                          </span>
+                          <button
+                            onClick={() => markAsDone(notif._id)}
+                            className="text-gray-400 hover:text-white transition-colors"
+                            title="Mark as Done"
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-300 mb-4">{notif.message}</p>
+                      
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            // Try multiple ways to get the requestId
+                            let reqId = '';
+                            if (notif.data) {
+                              if (typeof notif.data.requestId === 'string') {
+                                reqId = notif.data.requestId;
+                              } else if (notif.data.requestId) {
+                                reqId = String(notif.data.requestId);
+                              } else if (notif.data.requestId?.toString) {
+                                reqId = notif.data.requestId.toString();
+                              }
+                            }
+                            
+                            // Get senderId as fallback
+                            const senderIdStr = notif.senderId?._id?.toString() || notif.senderId?._id || '';
+                            
+                            handleFriendRequest(notif._id, reqId, senderIdStr, 'accept');
+                          }}
+                          disabled={processingRequest === notif._id || notif.read}
+                          className="flex-1 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                        >
+                          {processingRequest === notif._id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Check className="w-4 h-4" />
+                              Accept
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => {
+                            // Try multiple ways to get the requestId
+                            let reqId = '';
+                            if (notif.data) {
+                              if (typeof notif.data.requestId === 'string') {
+                                reqId = notif.data.requestId;
+                              } else if (notif.data.requestId) {
+                                reqId = String(notif.data.requestId);
+                              } else if (notif.data.requestId?.toString) {
+                                reqId = notif.data.requestId.toString();
+                              }
+                            }
+                            
+                            // Get senderId as fallback
+                            const senderIdStr = notif.senderId?._id?.toString() || notif.senderId?._id || '';
+                            
+                            handleFriendRequest(notif._id, reqId, senderIdStr, 'reject');
+                          }}
+                          disabled={processingRequest === notif._id || notif.read}
+                          className="flex-1 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                        >
+                          {processingRequest === notif._id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Ban className="w-4 h-4" />
+                              Reject
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Message Notifications */}
+              {messageNotifications.map((notif) => (
+                <div
+                  key={notif._id}
+                  className={`p-6 transition-colors ${
+                    !notif.read ? 'bg-blue-900/20 hover:bg-blue-900/30' : 'hover:bg-gray-750'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div 
+                      onClick={() => {
+                        if (!notif.read) markAsRead(notif._id);
+                        // Navigate to chat with the sender
+                        if (notif.senderId._id) {
+                          router.push(`/chat?userId=${notif.senderId._id}`);
+                        }
+                      }}
+                      className="flex-1 cursor-pointer"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="relative flex-shrink-0">
+                          {notif.senderId.image ? (
+                            <img
+                              src={notif.senderId.image}
+                              alt={notif.senderId.name}
+                              className="w-16 h-16 rounded-full object-cover shadow-md"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
+                              {notif.senderId.avatar || notif.senderId.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-gray-800 flex items-center justify-center">
+                            <MessageSquare className="w-3 h-3 text-white" />
+                          </div>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <h3 className="font-bold text-white text-lg">
+                              {notif.senderId.name}
+                            </h3>
+                            <span className="text-xs text-gray-400 whitespace-nowrap">
+                              {getTimeAgo(notif.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-300 mb-2">{notif.message}</p>
+                          {notif.data?.messageContent && (
+                            <div className="bg-gray-700/50 rounded-lg p-3 mt-2">
+                              <p className="text-sm text-white">{notif.data.messageContent}</p>
+                            </div>
+                          )}
+                          {!notif.read && (
+                            <span className="inline-block mt-2 px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
+                              New
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAsDone(notif._id);
+                      }}
+                      className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                      title="Mark as Done"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
               {/* Swap Proposal Notifications */}
-              {(activeTab === 'all' || activeTab === 'swaps') && pendingSwapProposals.map((notif) => (
+              {pendingSwapProposals.map((notif) => (
                 <div
                   key={notif._id}
                   className={`p-6 transition-colors ${
@@ -434,9 +624,18 @@ export default function NotificationsPage() {
                           <h3 className="font-bold text-white text-lg">
                             {notif.senderId.name}
                           </h3>
-                          <span className="text-xs text-gray-400 whitespace-nowrap">
-                            {getTimeAgo(notif.createdAt)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400 whitespace-nowrap">
+                              {getTimeAgo(notif.createdAt)}
+                            </span>
+                            <button
+                              onClick={() => markAsDone(notif._id)}
+                              className="text-gray-400 hover:text-white transition-colors"
+                              title="Mark as Done"
+                            >
+                              <CheckCircle className="w-5 h-5" />
+                            </button>
+                          </div>
                         </div>
                         <p className="text-sm text-gray-300 mb-3">{notif.message}</p>
 
@@ -503,127 +702,68 @@ export default function NotificationsPage() {
                 </div>
               ))}
 
-              {/* Friend Request Notifications */}
-              {(activeTab === 'all' || activeTab === 'friends') && pendingFriendRequests.map((request) => (
-                <div
-                  key={request._id}
-                  className="p-6 hover:bg-gray-750 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4 flex-1">
-                      <div className="relative flex-shrink-0">
-                        {request.senderId.avatar?.startsWith('http') ? (
-                          <img
-                            src={request.senderId.avatar}
-                            alt={request.senderId.name}
-                            className="w-16 h-16 rounded-full object-cover shadow-md"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
-                            {request.senderId.name.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full border-2 border-gray-800 flex items-center justify-center">
-                          <UserPlus className="w-3 h-3 text-white" />
-                        </div>
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <h3 className="font-bold text-white text-lg">
-                            {request.senderId.name}
-                          </h3>
-                          <span className="text-xs text-gray-400 whitespace-nowrap">
-                            {getTimeAgo(request.createdAt)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-400 mb-2">{request.senderId.email}</p>
-                        <p className="text-sm text-gray-300">
-                          Wants to connect with you
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => handleFriendRequest(request._id, 'accept')}
-                        disabled={processingRequest === request._id}
-                        className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                      >
-                        {processingRequest === request._id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Check className="w-4 h-4" />
-                            Accept
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleFriendRequest(request._id, 'reject')}
-                        disabled={processingRequest === request._id}
-                        className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                      >
-                        {processingRequest === request._id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Ban className="w-4 h-4" />
-                            Reject
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
               {/* Other Swap Notifications (Accepted/Rejected) */}
-              {(activeTab === 'all' || activeTab === 'swaps') && otherSwapNotifications.map((notif) => (
+              {otherSwapNotifications.map((notif) => (
                 <div
                   key={notif._id}
-                  onClick={() => !notif.read && markAsRead(notif._id)}
-                  className={`p-6 transition-colors cursor-pointer ${
+                  className={`p-6 transition-colors ${
                     !notif.read ? 'bg-gray-750 hover:bg-gray-700' : 'hover:bg-gray-750'
                   }`}
                 >
                   <div className="flex items-start gap-4">
-                    <div className="relative flex-shrink-0">
-                      {notif.senderId.image ? (
-                        <img
-                          src={notif.senderId.image}
-                          alt={notif.senderId.name}
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg">
-                          {notif.senderId.avatar || notif.senderId.name.charAt(0).toUpperCase()}
+                    <div 
+                      onClick={() => !notif.read && markAsRead(notif._id)}
+                      className="flex-1 cursor-pointer"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="relative flex-shrink-0">
+                          {notif.senderId.image ? (
+                            <img
+                              src={notif.senderId.image}
+                              alt={notif.senderId.name}
+                              className="w-12 h-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg">
+                              {notif.senderId.avatar || notif.senderId.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-gray-800 flex items-center justify-center ${
+                            notif.type === 'swap_accepted' ? 'bg-green-500' : 'bg-red-500'
+                          }`}>
+                            {notif.type === 'swap_accepted' ? (
+                              <CheckCircle className="w-3 h-3 text-white" />
+                            ) : (
+                              <XCircle className="w-3 h-3 text-white" />
+                            )}
+                          </div>
                         </div>
-                      )}
-                      <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-gray-800 flex items-center justify-center ${
-                        notif.type === 'swap_accepted' ? 'bg-green-500' : 'bg-red-500'
-                      }`}>
-                        {notif.type === 'swap_accepted' ? (
-                          <CheckCircle className="w-3 h-3 text-white" />
-                        ) : (
-                          <XCircle className="w-3 h-3 text-white" />
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className="text-white font-medium">{notif.message}</p>
-                        <span className="text-xs text-gray-400 whitespace-nowrap">
-                          {getTimeAgo(notif.createdAt)}
-                        </span>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <p className="text-white font-medium">{notif.message}</p>
+                            <span className="text-xs text-gray-400 whitespace-nowrap">
+                              {getTimeAgo(notif.createdAt)}
+                            </span>
+                          </div>
+                          {!notif.read && (
+                            <span className="inline-block px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
+                              New
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {!notif.read && (
-                        <span className="inline-block px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
-                          New
-                        </span>
-                      )}
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAsDone(notif._id);
+                      }}
+                      className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                      title="Mark as Done"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
               ))}

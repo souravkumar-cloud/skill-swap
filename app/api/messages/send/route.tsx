@@ -3,6 +3,7 @@ import { auth } from '@/auth'; // Adjust path to your auth.ts file
 import { connectDB } from '@/lib/connectDB';
 import Message from '@/models/Message';
 import User from '@/models/userModel';
+import Notification from '@/models/notifications';
 
 export async function POST(req: NextRequest) {
   try {
@@ -79,6 +80,21 @@ export async function POST(req: NextRequest) {
     const populatedMessage = await Message.findById(newMessage._id)
       .populate('senderId', 'name email')
       .populate('receiverId', 'name email');
+
+    // Create a notification for receiver
+    try {
+      await Notification.create({
+        userId: receiver._id,
+        type: 'message',
+        senderId: currentUser._id,
+        message: `${currentUser.name} sent you a message`,
+        data: { messageId: newMessage._id.toString() },
+        read: false
+      });
+    } catch (e) {
+      // do not break message send if notification fails
+      console.error('Failed to create notification for message', e);
+    }
 
     return NextResponse.json({
       success: true,

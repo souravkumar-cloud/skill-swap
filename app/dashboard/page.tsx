@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from "next-auth/react";
 import { useRouter } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -11,7 +11,6 @@ import {
   faTrophy,
   faArrowTrendUp,
   faSpinner,
-  faSync,
   faPlus,
   faTimes,
   faCode,
@@ -23,8 +22,11 @@ import {
   faStar,
   faFilter,
   faSearch,
-  faStarHalfAlt
+  faStarHalfAlt,
+  faUser,
+  faClock
 } from '@fortawesome/free-solid-svg-icons';
+import Image from 'next/image';
 
 interface DashboardStats {
   skillsShared: number;
@@ -56,6 +58,8 @@ interface Match {
   completedProjects: number;
   responseTime: string;
   canSwap: boolean;
+  swapStatus?: 'pending' | 'accepted' | null;
+  hasSwapProposal?: boolean;
 }
 
 interface UserSkills {
@@ -63,7 +67,12 @@ interface UserSkills {
   learning: string[];
 }
 
-
+interface SwapProposal {
+  _id: string;
+  proposerId: string;
+  receiverId: string;
+  status: string;
+}
 
 export default function WorkExchangeDashboard() {
   const { data: session } = useSession();
@@ -72,6 +81,7 @@ export default function WorkExchangeDashboard() {
 
   const [userSkills, setUserSkills] = useState<UserSkills>({ skills: [], learning: [] });
   const [matches, setMatches] = useState<Match[]>([]);
+  const [existingProposals, setExistingProposals] = useState<SwapProposal[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     skillsShared: 0,
     activeConnections: 0,
@@ -89,7 +99,6 @@ export default function WorkExchangeDashboard() {
   });
   
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [modalType, setModalType] = useState<'offer' | 'need'>('offer');
   const [newSkill, setNewSkill] = useState('');
@@ -99,8 +108,7 @@ export default function WorkExchangeDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   // Fetch all dashboard data
-  const fetchDashboardData = async (showRefreshing = false) => {
-    if (showRefreshing) setRefreshing(true);
+  const fetchDashboardData = useCallback(async () => {
     setError(null);
     
     try {
@@ -118,30 +126,39 @@ export default function WorkExchangeDashboard() {
         setStats(statsData.stats);
       }
 
-      // Fetch matches
+      // Fetch matches (now includes swapStatus for each match)
       const matchesRes = await fetch('/api/matches/find');
       if (matchesRes.ok) {
         const matchesData = await matchesRes.json();
         setMatches(matchesData.matches);
       }
+
+      // Note: Swap status is now included in each match from /api/matches/find
+      // The existingProposals state is kept for backward compatibility with getSwapStatus fallback
+      setExistingProposals([]);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       setError('Unable to load some data. Please refresh.');
     } finally {
       setLoading(false);
-      if (showRefreshing) setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (session?.user) {
       fetchDashboardData();
     }
-  }, [session]);
+  }, [session, fetchDashboardData]);
 
-  const handleRefresh = () => {
-    fetchDashboardData(true);
-  };
+  // Auto-refresh every 30 seconds to catch proposal status changes
+  useEffect(() => {
+    if (!session?.user) return;
+    const interval = setInterval(() => {
+      fetchDashboardData();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [session, fetchDashboardData]);
 
   const handleAddSkill = async () => {
     if (!newSkill.trim()) return;
@@ -211,8 +228,10 @@ export default function WorkExchangeDashboard() {
       });
 
       if (response.ok) {
-        alert('✅ Swap proposal sent successfully!');
-        fetchDashboardData(true);
+        // Refresh dashboard to update the matches list
+        await fetchDashboardData(true);
+        // Navigate to active swaps so the user sees the pending/active swap
+        window.location.href = '/activeSwap';
       } else {
         const data = await response.json();
         alert(data.error || 'Failed to send proposal');
@@ -223,7 +242,47 @@ export default function WorkExchangeDashboard() {
     }
   };
 
-  const filteredMatches = matches
+  // Helper function to check if proposal exists with this user
+  const hasExistingProposal = (matchId: string): boolean => {
+    return existingProposals.some(
+      proposal => 
+        proposal.receiverId === matchId || 
+        proposal.proposerId === matchId
+    );
+  };
+
+  // Helper function to get swap status for a match
+  const getSwapStatus = (match: Match): 'pending' | 'accepted' | null => {
+    // First check if match has swapStatus from API
+    if (match.swapStatus) {
+      return match.swapStatus;
+    }
+    // Fallback to checking existingProposals
+    const proposal = existingProposals.find(
+      p => p.receiverId === match.id || p.proposerId === match.id
+    );
+    return proposal ? (proposal.status as 'pending' | 'accepted') : null;
+  };
+
+  // Helper function to get initials from name
+  const getInitials = (name: string): string => {
+    const names = name.split(' ');
+    if (names.length >= 2) {
+      return `${names[0][0]}${names[1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  // Helper function to format rating
+  const formatRating = (rating: number): string => {
+    if (rating === 0) return 'New';
+    return rating.toFixed(1);
+  };
+
+  // Filter matches - now we show all matches and display status on button
+  const availableMatches = matches;
+
+  const filteredMatches = availableMatches
     .filter(match => {
       if (filterMatch === 'high') return match.matchScore >= 90;
       if (filterMatch === 'medium') return match.matchScore >= 80 && match.matchScore < 90;
@@ -241,7 +300,7 @@ export default function WorkExchangeDashboard() {
       <div className="min-h-screen  flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-white mb-2">Loading friends...</h2>
+          <h2 className="text-xl font-semibold text-white mb-2">Loading dashboard...</h2>
           <p className="text-gray-400">Please wait</p>
         </div>
       </div>
@@ -249,42 +308,43 @@ export default function WorkExchangeDashboard() {
   }
 
   const statsConfig = [
-    {
-      title: 'Services I Offer',
-      value: stats.skillsShared,
-      icon: faBriefcase,
-      color: 'bg-blue-500',
-      trend: `+${stats.trends.weeklySkillsShared} this week`,
-    },
-    {
-      title: 'Active Swaps',
-      value: stats.activeConnections,
-      icon: faExchangeAlt,
-      color: 'bg-green-500',
-      trend: `+${stats.trends.newConnections} new`,
-    },
-    {
-      title: 'Services I Need',
-      value: stats.skillsLearning,
-      icon: faLightbulb,
-      color: 'bg-purple-500',
-      trend: `${stats.trends.learningInProgress} in progress`,
-    },
-    {
-      title: 'Completed Swaps',
-      value: stats.achievements,
-      icon: faTrophy,
-      color: 'bg-orange-500',
-      trend: `+${stats.trends.monthlyAchievements} this month`,
-    },
-    {
-      title: 'Avg Rating',
-      value: stats.Rating,
-      icon: faStarHalfAlt,
-      color: 'bg-yellow-500',
-      trend: `+${stats.trends.DailyRating} this month`,
-    },
-  ];
+  {
+    title: 'Services I Offer',
+    value: stats?.skillsShared ?? 0,
+    icon: faBriefcase,
+    color: 'bg-blue-500',
+    trend: `+${stats?.trends?.weeklySkillsShared ?? 0} this week`,
+  },
+  {
+    title: 'Active Swaps',
+    value: stats?.activeConnections ?? 0,
+    icon: faExchangeAlt,
+    color: 'bg-green-500',
+    trend: `+${stats?.trends?.newConnections ?? 0} new`,
+  },
+  {
+    title: 'Services I Need',
+    value: stats?.skillsLearning ?? 0,
+    icon: faLightbulb,
+    color: 'bg-purple-500',
+    trend: `${stats?.trends?.learningInProgress ?? 0} in progress`,
+  },
+  {
+    title: 'Completed Swaps',
+    value: stats?.achievements ?? 0,
+    icon: faTrophy,
+    color: 'bg-orange-500',
+    trend: `+${stats?.trends?.monthlyAchievements ?? 0} this month`,
+  },
+  {
+    title: 'Avg Rating',
+    value: (stats?.Rating ?? 0).toFixed(1),
+    icon: faStarHalfAlt,
+    color: 'bg-yellow-500',
+    trend: `+${(stats?.trends?.DailyRating ?? 0).toFixed(1)} this month`,
+  },
+];
+
 
   return (
     <div className="min-h-screen  p-6">
@@ -305,17 +365,6 @@ export default function WorkExchangeDashboard() {
             Exchange work for work - No money involved, just pure skill swapping
           </p>
         </div>
-        {/* <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700 flex items-center gap-2 disabled:opacity-50"
-        >
-          <FontAwesomeIcon 
-            icon={faSync} 
-            className={`${refreshing ? 'animate-spin' : ''}`} 
-          />
-          Refresh
-        </button> */}
       </div>
 
       {/* Stats Grid */}
@@ -470,7 +519,11 @@ export default function WorkExchangeDashboard() {
           <div className="text-center py-12 text-gray-400">
             <FontAwesomeIcon icon={faUsers} className="text-5xl mb-4 opacity-20" />
             <p className="text-lg font-medium mb-2">No matches found</p>
-            <p className="text-sm">Add your skills and needs to find swap partners!</p>
+            <p className="text-sm">
+              {availableMatches.length === 0 && matches.length > 0
+                ? 'All potential matches already have active proposals!'
+                : 'Add your skills and needs to find swap partners!'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -480,8 +533,19 @@ export default function WorkExchangeDashboard() {
                 className="bg-gray-700/50 rounded-lg p-5 hover:bg-gray-700 transition-all border border-gray-600 hover:border-gray-500"
               >
                 <div className="flex items-start gap-4 mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-3xl shadow-lg">
-                    {match.avatar}
+                  {/* User Avatar/Image */}
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold shadow-lg overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600">
+                    {match.image ? (
+                      <Image
+                        src={match.image}
+                        alt={match.name}
+                        width={56}
+                        height={56}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-white">{getInitials(match.name)}</span>
+                    )}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-1">
@@ -495,7 +559,7 @@ export default function WorkExchangeDashboard() {
                     <div className="flex items-center gap-3 text-sm text-gray-400">
                       <span className="flex items-center gap-1">
                         <FontAwesomeIcon icon={faStar} className="text-yellow-500" />
-                        {match.rating}
+                        {formatRating(match.rating)}
                       </span>
                       <span>{match.completedProjects} swaps</span>
                       <span>⚡ {match.responseTime}</span>
@@ -525,14 +589,44 @@ export default function WorkExchangeDashboard() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleProposeSwap(match)}
-                  className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-semibold flex items-center justify-center gap-2 shadow-lg"
-                >
-                  <FontAwesomeIcon icon={faHandshake} />
-                  Propose Swap
-                  <FontAwesomeIcon icon={faArrowRight} />
-                </button>
+                {(() => {
+                  const swapStatus = getSwapStatus(match);
+                  
+                  if (swapStatus === 'pending') {
+                    return (
+                      <button
+                        disabled
+                        className="w-full bg-yellow-900/50 text-yellow-400 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 cursor-not-allowed border border-yellow-700 shadow-lg"
+                        title="Swap proposal is pending"
+                      >
+                        <FontAwesomeIcon icon={faClock} />
+                        Pending
+                      </button>
+                    );
+                  } else if (swapStatus === 'accepted') {
+                    return (
+                      <button
+                        disabled
+                        className="w-full bg-green-900/50 text-green-400 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 cursor-not-allowed border border-green-700 shadow-lg"
+                        title="Swap proposal accepted"
+                      >
+                        <FontAwesomeIcon icon={faCheckCircle} />
+                        Accepted
+                      </button>
+                    );
+                  } else {
+                    return (
+                      <button
+                        onClick={() => handleProposeSwap(match)}
+                        className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all font-semibold flex items-center justify-center gap-2 shadow-lg"
+                      >
+                        <FontAwesomeIcon icon={faHandshake} />
+                        Propose Swap
+                        <FontAwesomeIcon icon={faArrowRight} />
+                      </button>
+                    );
+                  }
+                })()}
               </div>
             ))}
           </div>
