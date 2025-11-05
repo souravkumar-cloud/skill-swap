@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import SkillSwapLogo from './SkillSwapLogo';
 import {
   faBars,
   faBell,
@@ -148,8 +149,11 @@ const Header: React.FC<NavbarProps> = ({ user }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-[70px]">
           {/* Left: Logo */}
-          <Link href="/dashboard" className="text-blue-500 text-2xl font-semibold flex-shrink-0">
-            Skill Swap
+          <Link href="/dashboard" className="flex items-center gap-3 text-blue-600 hover:text-blue-700 transition-colors flex-shrink-0">
+            <SkillSwapLogo size={40} className="flex-shrink-0" />
+            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Skill Swap
+            </span>
           </Link>
 
           {/* Center: Navigation Menu (Desktop) */}
