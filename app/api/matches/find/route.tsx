@@ -57,12 +57,12 @@ export async function GET() {
     // Calculate match scores and format response
     const matches = potentialMatches.map(user => {
       // Skills they have that I need
-      const theyCanDoForMe = user.skills?.filter(skill => 
+      const theyCanDoForMe = user.skills?.filter((skill: string) => 
         currentUser.learning?.includes(skill)
       ) || [];
 
       // Skills I have that they need
-      const iCanDoForThem = currentUser.skills?.filter(skill => 
+      const iCanDoForThem = currentUser.skills?.filter((skill: string) => 
         user.learning?.includes(skill)
       ) || [];
 

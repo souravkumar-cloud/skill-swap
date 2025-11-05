@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import User from '@/models/userModel';
 import FriendRequest from '@/models/FriendRequest';
 import Match from '@/models/match';
 
-export async function GET(req) {
+export async function GET(req: NextRequest) {
   try {
     const session = await auth();
 
@@ -86,11 +86,12 @@ export async function GET(req) {
     }
 
     // Map friend status and swap proposal status for each user
-    const usersWithFriendStatus = users.map(user => {
+    const usersWithFriendStatus = users.map((user: any) => {
+      const userId = user._id?.toString() || '';
       // Check if there's a friend request between current user and this user
-      const request = friendRequests.find(req => 
-        (req.senderId.toString() === currentUser._id.toString() && req.receiverId.toString() === user._id.toString()) ||
-        (req.receiverId.toString() === currentUser._id.toString() && req.senderId.toString() === user._id.toString())
+      const request = friendRequests.find((req: any) => 
+        (req.senderId.toString() === currentUser._id.toString() && req.receiverId.toString() === userId) ||
+        (req.receiverId.toString() === currentUser._id.toString() && req.senderId.toString() === userId)
       );
 
       let friendStatus = 'none';
@@ -109,12 +110,12 @@ export async function GET(req) {
       }
 
       // Check if there's a swap proposal between current user and this user
-      const hasSwapProposal = swapProposals.some(proposal => 
-        (proposal.user.toString() === currentUser._id.toString() && proposal.matchedUser.toString() === user._id.toString()) ||
-        (proposal.matchedUser.toString() === currentUser._id.toString() && proposal.user.toString() === user._id.toString())
+      const hasSwapProposal = swapProposals.some((proposal: any) => 
+        (proposal.user.toString() === currentUser._id.toString() && proposal.matchedUser.toString() === userId) ||
+        (proposal.matchedUser.toString() === currentUser._id.toString() && proposal.user.toString() === userId)
       );
 
-      const uId = user._id.toString();
+      const uId = userId;
       const stat = statsMap[uId] || { completed: 0, ratingSum: 0, ratingCount: 0 };
       const averageRating = stat.ratingCount > 0 ? stat.ratingSum / stat.ratingCount : (user.rating || 0);
 
@@ -139,7 +140,7 @@ export async function GET(req) {
   } catch (error) {
     console.error('Error fetching users for skill exchange:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch users', details: error.message },
+      { error: 'Failed to fetch users', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

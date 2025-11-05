@@ -459,8 +459,6 @@ export default function NotificationsPage() {
                                 reqId = notif.data.requestId;
                               } else if (notif.data.requestId) {
                                 reqId = String(notif.data.requestId);
-                              } else if (notif.data.requestId?.toString) {
-                                reqId = notif.data.requestId.toString();
                               }
                             }
                             
@@ -490,8 +488,6 @@ export default function NotificationsPage() {
                                 reqId = notif.data.requestId;
                               } else if (notif.data.requestId) {
                                 reqId = String(notif.data.requestId);
-                              } else if (notif.data.requestId?.toString) {
-                                reqId = notif.data.requestId.toString();
                               }
                             }
                             

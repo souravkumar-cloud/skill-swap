@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import FriendRequest from '@/models/FriendRequest';
 import User from '@/models/userModel';
 
-export async function DELETE(req) {
+export async function DELETE(req: NextRequest) {
   try {
     const session = await auth();
 
@@ -57,7 +57,7 @@ export async function DELETE(req) {
   } catch (error) {
     console.error('Error removing friend:', error);
     return NextResponse.json(
-      { error: 'Failed to remove friend', details: error.message },
+      { error: 'Failed to remove friend', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

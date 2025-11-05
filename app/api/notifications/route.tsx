@@ -107,8 +107,8 @@ export async function GET(req: NextRequest) {
             const message = await Message.findById(serializedData.messageId)
               .select('message')
               .lean();
-            if (message) {
-              serializedData.messageContent = message.message;
+            if (message && typeof message === 'object' && 'message' in message) {
+              serializedData.messageContent = (message as any).message;
             }
           } catch (e) {
             console.error('Error fetching message content:', e);

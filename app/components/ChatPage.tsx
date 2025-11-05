@@ -58,7 +58,7 @@ export default function ChatPage({ userId }: ChatPageProps) {
         
         // Get other user info from first message (only set once)
         if (data.messages.length > 0) {
-          setOtherUser(prev => {
+          setOtherUser((prev: any) => {
             if (prev) return prev; // Don't update if already set
             const firstMsg = data.messages[0];
             const other = firstMsg.senderId.email === session?.user?.email 

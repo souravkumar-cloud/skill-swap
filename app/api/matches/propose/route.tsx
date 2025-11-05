@@ -112,11 +112,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Calculate match score
-    const currentUserSkillsMatch = currentUser.skills?.filter(s => 
+    const currentUserSkillsMatch = currentUser.skills?.filter((s: string) => 
       matchedUser.learning?.includes(s)
     ).length || 0;
     
-    const matchedUserSkillsMatch = matchedUser.skills?.filter(s => 
+    const matchedUserSkillsMatch = matchedUser.skills?.filter((s: string) => 
       currentUser.learning?.includes(s)
     ).length || 0;
 

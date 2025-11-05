@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import FriendRequest from '@/models/FriendRequest';
 import User from '@/models/userModel';
 
-export async function GET(req) {
+export async function GET(req: NextRequest) {
   try {
     const session = await auth();
 
@@ -49,7 +49,7 @@ export async function GET(req) {
   } catch (error) {
     console.error('Error fetching friend requests:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch friend requests', details: error.message },
+      { error: 'Failed to fetch friend requests', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import Message from '@/models/Message';
 import User from '@/models/userModel';
 
-export async function POST(req) {
+export async function POST(req: NextRequest) {
   try {
     const session = await auth();
 
@@ -54,7 +54,7 @@ export async function POST(req) {
   } catch (error) {
     console.error('Error marking messages as read:', error);
     return NextResponse.json(
-      { error: 'Failed to mark messages as read', details: error.message },
+      { error: 'Failed to mark messages as read', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

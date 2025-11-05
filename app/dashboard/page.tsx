@@ -179,7 +179,7 @@ export default function WorkExchangeDashboard() {
         setUserSkills({ skills: data.skills, learning: data.learning });
         setNewSkill('');
         setShowAddModal(false);
-        fetchDashboardData(true);
+        fetchDashboardData();
       } else {
         const data = await response.json();
         alert(data.error || 'Failed to add service');
@@ -203,7 +203,7 @@ export default function WorkExchangeDashboard() {
       if (response.ok) {
         const data = await response.json();
         setUserSkills({ skills: data.skills, learning: data.learning });
-        fetchDashboardData(true);
+        fetchDashboardData();
       } else {
         const data = await response.json();
         alert(data.error || 'Failed to remove service');
@@ -229,7 +229,7 @@ export default function WorkExchangeDashboard() {
 
       if (response.ok) {
         // Refresh dashboard to update the matches list
-        await fetchDashboardData(true);
+        await fetchDashboardData();
         // Navigate to active swaps so the user sees the pending/active swap
         window.location.href = '/activeSwap';
       } else {

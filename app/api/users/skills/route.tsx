@@ -156,14 +156,14 @@ export async function DELETE(req: NextRequest) {
 
     // Remove from appropriate array
     if (type === 'offer') {
-      user.skills = (user.skills || []).filter(s => s !== skill);
+      user.skills = (user.skills || []).filter((s: string) => s !== skill);
       
       // Update stats
       if (user.stats) {
         user.stats.skillsShared = user.skills.length;
       }
     } else {
-      user.learning = (user.learning || []).filter(s => s !== skill);
+      user.learning = (user.learning || []).filter((s: string) => s !== skill);
       
       // Update stats
       if (user.stats) {

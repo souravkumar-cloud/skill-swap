@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectDB } from '@/lib/connectDB';
 import FriendRequest from '@/models/FriendRequest';
 import User from '@/models/userModel';
 import Notification from '@/models/notifications';
 
-export async function POST(req) {
+export async function POST(req: NextRequest) {
   try {
     const session = await auth();
 
@@ -126,7 +126,7 @@ export async function POST(req) {
   } catch (error) {
     console.error('Error sending friend request:', error);
     
-    if (error.code === 11000) {
+    if (error && typeof error === 'object' && 'code' in error && (error as any).code === 11000) {
       return NextResponse.json(
         { error: 'Friend request already exists' },
         { status: 400 }
@@ -134,7 +134,7 @@ export async function POST(req) {
     }
 
     return NextResponse.json(
-      { error: 'Failed to send friend request', details: error.message },
+      { error: 'Failed to send friend request', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

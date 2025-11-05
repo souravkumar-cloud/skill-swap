@@ -5,7 +5,7 @@ import User from '@/models/userModel';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const session = await auth();
@@ -19,7 +19,7 @@ export async function GET(
 
     await connectDB();
 
-    const { userId } = params;
+    const { userId } = await params;
 
     // Get user by ID
     const user = await User.findById(userId).select('name email _id image');
