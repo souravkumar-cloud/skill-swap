@@ -57,7 +57,7 @@ export default function CompletedSwapPage() {
       {error && (
         <div className="mb-6 bg-red-900/50 border border-red-700 rounded-lg p-4 text-red-200">{error}</div>
       )}
-      <h1 className="text-2xl font-bold text-white mb-6">Completed Swaps</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Completed Swaps</h1>
       {items.length === 0 ? (
         <div className="text-center py-16 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
           <div className="text-gray-400 text-lg">No completed swaps yet.</div>

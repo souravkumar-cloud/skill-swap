@@ -273,8 +273,8 @@ export default function FriendsPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <FontAwesomeIcon icon={faUsers} className="w-10 h-10 text-blue-500" />
-              <h1 className="text-4xl font-bold text-white">My Network</h1>
+              <FontAwesomeIcon icon={faUsers} className="w-20 h-20 text-blue-500" />
+              <h1 className="text-4xl font-bold text-gray-800">My Network</h1>
             </div>
             <p className="text-lg text-gray-400">
               {friends.length === 0 
