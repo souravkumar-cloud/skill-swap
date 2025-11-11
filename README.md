@@ -2,8 +2,13 @@
 
 A modern platform for exchanging skills and knowledge with others. Built with Next.js, Skill Swap connects people who want to learn new skills with those willing to teach them.
 
+## 🌐 Live Demo
+
+Check out the live application: **[https://skill-swap-6454.vercel.app/](https://skill-swap-6454.vercel.app/)**
+
 ## ✨ Features
 
+- **User Authentication**: Secure sign-in and account management
 - **Skill Exchange**: Connect with others to teach and learn skills
 - **User Profiles**: Create and manage your personal skill portfolio
 - **Real-time Matching**: Find the perfect skill exchange partner
@@ -84,13 +89,15 @@ To learn more about Next.js, check out the following resources:
 
 ## 🚢 Deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This application is deployed on Vercel and is live at: **[https://skill-swap-6454.vercel.app/](https://skill-swap-6454.vercel.app/)**
 
-Check out the [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Deploy Your Own
 
-### Deploy on Vercel
+You can deploy your own instance of Skill Swap using Vercel:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/souravkumar-cloud/skill-swap)
+
+For more deployment options, check out the [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying).
 
 ## 🤝 Contributing
 
